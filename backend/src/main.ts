@@ -6,10 +6,21 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
+// Global error logging
+process.on('uncaughtException', (err) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ UNHANDLED REJECTION:', reason);
+});
+
 async function bootstrap() {
+  console.log('🚀 Starting OdontoSuite backend...');
   const app = await NestFactory.create(AppModule);
 
   const port = process.env.PORT || 3000;
+  console.log(`📍 Port: ${port}`);
 
   app.use(helmet());
 

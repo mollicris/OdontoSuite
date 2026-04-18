@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from '@tanstack/react-router';
 import {
   AppShell,
@@ -11,6 +11,7 @@ import {
   NavLink,
   Stack,
   Box,
+  Select,
 } from '@mantine/core';
 import {
   IconLayoutDashboard,
@@ -24,12 +25,21 @@ import {
   IconSettings,
 } from '@tabler/icons-react';
 import { useAuthStore } from '../../auth/infrastructure/store/auth.store';
+import { clinicService } from '../../clinic/application/clinic.service';
+import { useClinicStore } from '../../clinic/infrastructure/store/clinic.store';
 import { BACKOFFICE_ROUTES } from '../router/metadata';
 
 export function BackofficeLayout() {
   const [mobileOpened, setMobileOpened] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { clinics, selectedClinicId } = useClinicStore();
+
+  useEffect(() => {
+    if (clinics.length === 0) {
+      clinicService.loadClinics().catch(() => undefined);
+    }
+  }, [clinics.length]);
 
   const handleLogout = () => {
     useAuthStore.getState().logout();
@@ -62,28 +72,40 @@ export function BackofficeLayout() {
             </Title>
           </Group>
 
-          <Menu shadow="md" position="bottom-end">
-            <Menu.Target>
-              <Group gap={10} style={{ cursor: 'pointer' }}>
-                <Box style={{ textAlign: 'right' }}>
-                  <Text size="sm" fw={500}>
-                    {user?.firstName}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {user?.email}
-                  </Text>
-                </Box>
-                <Avatar name={user?.fullName} color="blue" radius="xl" size="md" />
-              </Group>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item leftSection={<IconSettings size={14} />}>Configuración</Menu.Item>
-              <Menu.Divider />
-              <Menu.Item color="red" leftSection={<IconLogout size={14} />} onClick={handleLogout}>
-                Cerrar Sesión
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+          <Group>
+            <Select
+              size="xs"
+              placeholder="Selecciona clínica"
+              data={clinics.map((c) => ({ value: c.id, label: c.name }))}
+              value={selectedClinicId}
+              onChange={(id) => id && clinicService.selectClinic(id)}
+              style={{ minWidth: 180 }}
+              searchable
+            />
+
+            <Menu shadow="md" position="bottom-end">
+              <Menu.Target>
+                <Group gap={10} style={{ cursor: 'pointer' }}>
+                  <Box style={{ textAlign: 'right' }}>
+                    <Text size="sm" fw={500}>
+                      {user?.firstName}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {user?.email}
+                    </Text>
+                  </Box>
+                  <Avatar name={user?.fullName} color="blue" radius="xl" size="md" />
+                </Group>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item leftSection={<IconSettings size={14} />}>Configuración</Menu.Item>
+                <Menu.Divider />
+                <Menu.Item color="red" leftSection={<IconLogout size={14} />} onClick={handleLogout}>
+                  Cerrar Sesión
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
 

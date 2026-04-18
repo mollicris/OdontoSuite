@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   Query,
@@ -9,7 +10,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CreatePatientDto } from '../application/dtos/create-patient.dto';
+import { UpdatePatientDto } from '../application/dtos/update-patient.dto';
 import { CreatePatientUseCase } from '../application/use-cases/create-patient.use-case';
+import { UpdatePatientUseCase } from '../application/use-cases/update-patient.use-case';
 import { PatientRepository } from '../infrastructure/repositories/patient.repository';
 import { JwtGuard } from '@common/guards/jwt.guard';
 
@@ -20,6 +23,7 @@ import { JwtGuard } from '@common/guards/jwt.guard';
 export class PatientController {
   constructor(
     private readonly createPatientUseCase: CreatePatientUseCase,
+    private readonly updatePatientUseCase: UpdatePatientUseCase,
     private readonly patientRepository: PatientRepository,
   ) {}
 
@@ -61,5 +65,34 @@ export class PatientController {
       Number(take),
     );
     return patients;
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update patient', description: 'Update patient information' })
+  @ApiParam({ name: 'id', description: 'Patient ID' })
+  @ApiResponse({ status: 200, description: 'Patient updated successfully.' })
+  @ApiResponse({ status: 404, description: 'Patient not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async updatePatient(
+    @Param('id') id: string,
+    @Body() updatePatientDto: UpdatePatientDto,
+  ) {
+    return this.updatePatientUseCase.execute({
+      patientId: id,
+      ...updatePatientDto,
+    });
+  }
+
+  @Patch(':id/deactivate')
+  @ApiOperation({ summary: 'Deactivate patient', description: 'Mark patient as inactive (soft delete)' })
+  @ApiParam({ name: 'id', description: 'Patient ID' })
+  @ApiResponse({ status: 200, description: 'Patient deactivated successfully.' })
+  @ApiResponse({ status: 404, description: 'Patient not found.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  async deactivatePatient(@Param('id') id: string) {
+    return this.updatePatientUseCase.execute({
+      patientId: id,
+      isActive: false,
+    });
   }
 }

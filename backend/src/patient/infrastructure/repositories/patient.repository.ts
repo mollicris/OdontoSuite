@@ -6,9 +6,7 @@ import { PatientEntity } from '../../domain/patient.entity';
 export class PatientRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  private mapPrismaToEntity(
-    data: any,
-  ): Partial<PatientEntity> {
+  private mapPrismaToEntity(data: any): Partial<PatientEntity> {
     return {
       ...data,
       cpf: data.cpf || undefined,
@@ -19,45 +17,28 @@ export class PatientRepository {
       emergencyContact: data.emergencyContact || undefined,
       emergencyPhone: data.emergencyPhone || undefined,
       allergies: data.allergies ? JSON.parse(data.allergies) : undefined,
-      medicalConditions: data.medicalConditions
-        ? JSON.parse(data.medicalConditions)
-        : undefined,
+      medicalConditions: data.medicalConditions ? JSON.parse(data.medicalConditions) : undefined,
+      currentMedications: data.currentMedications ? JSON.parse(data.currentMedications) : undefined,
       insuranceProvider: data.insuranceProvider || undefined,
       insurancePolicyNo: data.insurancePolicyNo || undefined,
-      currentMedications: data.currentMedications
-        ? JSON.parse(data.currentMedications)
-        : undefined,
       notes: data.notes || undefined,
+    };
+  }
+
+  private serializeForPrisma(data: Partial<PatientEntity>): Record<string, any> {
+    const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = data as any;
+    return {
+      ...rest,
+      allergies: rest.allergies === undefined ? undefined : JSON.stringify(rest.allergies),
+      medicalConditions: rest.medicalConditions === undefined ? undefined : JSON.stringify(rest.medicalConditions),
+      currentMedications: rest.currentMedications === undefined ? undefined : JSON.stringify(rest.currentMedications),
     };
   }
 
   async create(patient: PatientEntity): Promise<PatientEntity> {
     const created = await this.prisma.patient.create({
-      data: {
-        clinicId: patient.clinicId,
-        firstName: patient.firstName,
-        lastName: patient.lastName,
-        email: patient.email,
-        phone: patient.phone,
-        dateOfBirth: patient.dateOfBirth,
-        gender: patient.gender,
-        cpf: patient.cpf,
-        address: patient.address,
-        city: patient.city,
-        state: patient.state,
-        zipCode: patient.zipCode,
-        emergencyContact: patient.emergencyContact,
-        emergencyPhone: patient.emergencyPhone,
-        allergies: JSON.stringify(patient.allergies || []),
-        medicalConditions: JSON.stringify(
-          patient.medicalConditions || [],
-        ),
-        insuranceProvider: patient.insuranceProvider,
-        notes: patient.notes,
-        isActive: patient.isActive,
-      },
+      data: this.serializeForPrisma(patient) as any,
     });
-
     return new PatientEntity(this.mapPrismaToEntity(created));
   }
 
@@ -102,16 +83,10 @@ export class PatientRepository {
   }
 
   async update(id: string, data: Partial<PatientEntity>): Promise<PatientEntity> {
-    const updateData = { ...data };
-    delete updateData.id;
-    delete updateData.createdAt;
-    delete updateData.updatedAt;
-
     const updated = await this.prisma.patient.update({
       where: { id },
-      data: updateData as any,
+      data: this.serializeForPrisma(data) as any,
     });
-
     return new PatientEntity(this.mapPrismaToEntity(updated));
   }
 }

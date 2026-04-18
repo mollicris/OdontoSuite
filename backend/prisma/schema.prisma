@@ -112,7 +112,7 @@ model Service {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  treatments Appointment[]
+  appointments Appointment[]
 
   @@index([clinicId])
   @@map("services")
