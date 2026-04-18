@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getTodayDate } from '../utils/dateUtils';
 import type { AppointmentStatus } from '../../domain/Appointment.types';
 
 interface AppointmentStore {
@@ -15,7 +16,7 @@ interface AppointmentStore {
 }
 
 export const useAppointmentStore = create<AppointmentStore>()((set) => ({
-  selectedDate: new Date(),
+  selectedDate: getTodayDate(),
   viewMode: 'day',
   selectedAppointmentId: null,
   statusFilter: 'ALL',

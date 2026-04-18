@@ -1,6 +1,7 @@
 import { Stack, Card, Divider, Button, Text, Modal, NumberInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useAppointmentStore } from '../infrastructure/store/appointment.store';
+import { getTodayDate } from '../infrastructure/utils/dateUtils';
 import { AppointmentStatusLegend } from '../list/components/AppointmentStatusLegend';
 
 export function AppointmentCalendar() {
@@ -54,15 +55,15 @@ export function AppointmentCalendar() {
     }
   };
 
-  const today = new Date();
+  const today = getTodayDate();
 
   return (
     <>
-      <Card withBorder p="lg" style={{ position: 'sticky', top: 0, width: '100%' }}>
-        <Stack gap="lg">
+      <Card withBorder p="sm" style={{ position: 'sticky', top: 0, width: '100%' }}>
+        <Stack gap="sm">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <Button size="sm" variant="subtle" onClick={handlePrevMonth} p={4}>
-              &lt;
+            <Button size="xs" variant="subtle" onClick={handlePrevMonth} p={0} style={{ width: 24, height: 24, fontSize: 16, lineHeight: 1 }}>
+              ‹
             </Button>
             <div style={{ flex: 1, textAlign: 'center', cursor: 'pointer' }} onClick={openYearModal}>
               <Text fw={700} size="sm" ta="center" style={{ textTransform: 'capitalize', marginBottom: 4 }}>
@@ -72,35 +73,35 @@ export function AppointmentCalendar() {
                 {year}
               </Text>
             </div>
-            <Button size="sm" variant="subtle" onClick={handleNextMonth} p={4}>
-              &gt;
+            <Button size="xs" variant="subtle" onClick={handleNextMonth} p={0} style={{ width: 24, height: 24, fontSize: 16, lineHeight: 1 }}>
+              ›
             </Button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, width: '100%' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, width: '100%' }}>
             {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sab'].map((dayName) => (
-              <div key={dayName} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 28 }}>
-                <Text size="xs" fw={700} ta="center" c="dimmed">
+              <div key={dayName} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 28, paddingBottom: 4, borderBottom: '1px solid var(--mantine-color-gray-2)' }}>
+                <Text size="xs" fw={600} ta="center" c="dimmed">
                   {dayName}
                 </Text>
               </div>
             ))}
 
             {days.map((day, idx) => {
-              const dayKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${day ?? `empty-${idx}`}`;
+              const dayKey = day ? `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${day}` : `empty-${idx}`;
               const dayDate = day ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day) : null;
-              const isSelected = dayDate && dayDate.toDateString() === selectedDate.toDateString();
-              const isToday = dayDate && dayDate.toDateString() === today.toDateString();
+              const isSelected = dayDate?.toDateString() === selectedDate.toDateString();
+              const isToday = dayDate?.toDateString() === today.toDateString();
 
               return (
-                <div key={dayKey} style={{ display: 'flex', justifyContent: 'center', minHeight: 40 }}>
+                <div key={dayKey} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 32 }}>
                   {day ? (
                     <Button
-                      size="sm"
+                      size="xs"
                       variant={isSelected ? 'filled' : isToday ? 'light' : 'subtle'}
                       color={isSelected ? 'blue' : isToday ? 'blue' : 'gray'}
                       onClick={() => handleSelectDay(day)}
-                      style={{ width: 40, height: 40, padding: 0, fontSize: 13, fontWeight: 500 }}
+                      style={{ width: 28, height: 28, padding: 0, fontSize: 12 }}
                     >
                       {day}
                     </Button>

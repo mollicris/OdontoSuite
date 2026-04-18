@@ -3,6 +3,7 @@ import { useForm } from '@mantine/form';
 import { z } from 'zod';
 import { appointmentService } from '../../application/appointment.service';
 import { checkAppointmentAvailability } from '../../infrastructure/api/appointment.api';
+import { getTodayDate } from '../../infrastructure/utils/dateUtils';
 import { useClinicStore } from '../../../clinic/infrastructure/store/clinic.store';
 import type { CreateAppointmentRequest } from '../../domain/Appointment.request';
 
@@ -33,6 +34,7 @@ export function useCreateAppointment(
   services: Service[] = [],
   clinicId: string,
   onSuccess?: () => void,
+  initialDate?: Date,
 ) {
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export function useCreateAppointment(
       patientId: '',
       dentistId: '',
       serviceId: '',
-      date: new Date(),
+      date: initialDate || getTodayDate(),
       startTime: '09:00',
       notes: '',
     },
@@ -86,6 +88,12 @@ export function useCreateAppointment(
   }, [selectedService, form.values.startTime]);
 
   useEffect(() => {
+    if (initialDate) {
+      form.setFieldValue('date', initialDate);
+    }
+  }, [initialDate]);
+
+  useEffect(() => {
     const checkAvailability = async () => {
       if (
         !selectedClinicId ||
@@ -102,12 +110,15 @@ export function useCreateAppointment(
 
       try {
         const [hours, minutes] = form.values.startTime.split(':').map(Number);
-        const startDateTime = new Date(form.values.date);
-        startDateTime.setHours(hours, minutes, 0, 0);
+        const year = form.values.date.getFullYear();
+        const month = String(form.values.date.getMonth() + 1).padStart(2, '0');
+        const day = String(form.values.date.getDate()).padStart(2, '0');
+        const startTimeStr = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+        const startDateTime = new Date(startTimeStr);
 
         const [endHours, endMinutes] = endTime.split(':').map(Number);
-        const endDateTime = new Date(form.values.date);
-        endDateTime.setHours(endHours, endMinutes, 0, 0);
+        const endTimeStr = `${year}-${month}-${day}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
+        const endDateTime = new Date(endTimeStr);
 
         const result = await checkAppointmentAvailability(
           selectedClinicId,
@@ -152,12 +163,15 @@ export function useCreateAppointment(
 
     try {
       const [hours, minutes] = values.startTime.split(':').map(Number);
-      const startDateTime = new Date(values.date);
-      startDateTime.setHours(hours, minutes, 0, 0);
+      const year = values.date.getFullYear();
+      const month = String(values.date.getMonth() + 1).padStart(2, '0');
+      const day = String(values.date.getDate()).padStart(2, '0');
+      const startTimeStr = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+      const startDateTime = new Date(startTimeStr);
 
       const [endHours, endMinutes] = endTime.split(':').map(Number);
-      const endDateTime = new Date(values.date);
-      endDateTime.setHours(endHours, endMinutes, 0, 0);
+      const endTimeStr = `${year}-${month}-${day}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
+      const endDateTime = new Date(endTimeStr);
 
       const req: CreateAppointmentRequest = {
         clinicId: selectedClinicId,

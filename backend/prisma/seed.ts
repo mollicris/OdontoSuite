@@ -46,32 +46,36 @@ async function main() {
   console.log(`  - Dentist: ${dentistRole.id}`);
   console.log(`  - Admin: ${adminRole.id}`);
 
-  // Create test clinic
+  // Create test clinic with specific ID for appointments demo
   const clinic = await prisma.clinic.upsert({
-    where: { email: 'test@clinic.com' },
+    where: { id: 'f48805c5-e12b-4774-9465-6b29c880d005' },
     update: {},
     create: {
-      name: 'Test Dental Clinic',
-      email: 'test@clinic.com',
-      phone: '+591 1234567890',
-      address: '123 Main St',
-      city: 'La Paz',
-      state: 'La Paz',
+      id: 'f48805c5-e12b-4774-9465-6b29c880d005',
+      name: 'Clínica Dental OdontoSuite',
+      email: 'info@odontosuites.com',
+      phone: '+591 2-3456789',
+      address: 'Calle Principal 123',
+      city: 'Santa Cruz',
+      state: 'SC',
       zipCode: '00000',
       country: 'Bolivia',
+      description: 'Clínica dental de referencia',
     },
   });
   console.log(`✅ Clinic created: ${clinic.id}`);
 
-  // Create test dentist user
+  // Create test dentist user with specific ID for appointments demo
   const dentist = await prisma.user.upsert({
-    where: { email: 'dentist@clinic.com' },
+    where: { id: '64b97af4-bdfa-49d4-8a41-f0b7e5e127cc' },
     update: {},
     create: {
-      email: 'dentist@clinic.com',
+      id: '64b97af4-bdfa-49d4-8a41-f0b7e5e127cc',
+      email: 'doctor.garcia@odontosuites.com',
       password: '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4/KFm', // password 'secret'
-      firstName: 'Dr.',
+      firstName: 'David',
       lastName: 'García',
+      phone: '+591 76123456',
       roleId: dentistRole.id,
     },
   });
@@ -92,53 +96,97 @@ async function main() {
   });
   console.log(`✅ Dentist profile created`);
 
-  // Create test patient
+  // Create test patient with specific ID for appointments demo
   const patient = await prisma.patient.upsert({
-    where: { cpf: 'TEST12345678' },
+    where: { id: '3db4b080-83ef-4b10-a2c8-b81b1a26d6bb' },
     update: {},
     create: {
+      id: '3db4b080-83ef-4b10-a2c8-b81b1a26d6bb',
       clinicId: clinic.id,
       firstName: 'Juan',
       lastName: 'Pérez',
-      email: 'patient@test.com',
-      phone: '+591 9876543210',
+      email: 'juan.perez@example.com',
+      phone: '+591 70123456',
       dateOfBirth: new Date('1990-01-15'),
       gender: 'M',
-      cpf: 'TEST12345678',
+      cpf: 'CPF-JUAN-001',
     },
   });
   console.log(`✅ Patient created: ${patient.id}`);
 
-  // Create test service
-  let service = await prisma.service.findFirst({
-    where: {
+  // Create test services with specific ID for appointments demo
+  const service = await prisma.service.upsert({
+    where: { id: '3388d40d-c3ec-4b3a-b5b4-2c4d20651b3d' },
+    update: {},
+    create: {
+      id: '3388d40d-c3ec-4b3a-b5b4-2c4d20651b3d',
       clinicId: clinic.id,
-      name: 'Limpieza',
+      name: 'Limpieza Dental',
+      description: 'Limpieza profesional de dientes y eliminación de sarro',
+      duration: 30,
+      price: 150,
+    },
+  });
+  console.log(`✅ Service created: ${service.id}`);
+
+  // Create additional services
+  await prisma.service.upsert({
+    where: { id: 'service-treatment-001' },
+    update: {},
+    create: {
+      id: 'service-treatment-001',
+      clinicId: clinic.id,
+      name: 'Tratamiento de Conducto',
+      description: 'Tratamiento endodóntico completo',
+      duration: 60,
+      price: 450,
     },
   });
 
-  if (!service) {
-    service = await prisma.service.create({
-      data: {
+  await prisma.service.upsert({
+    where: { id: 'service-extraction-001' },
+    update: {},
+    create: {
+      id: 'service-extraction-001',
+      clinicId: clinic.id,
+      name: 'Extracción Dental',
+      description: 'Extracción segura de piezas dentales',
+      duration: 45,
+      price: 200,
+    },
+  });
+
+  // Create clinic schedule (operating hours)
+  // Monday to Saturday: 08:00 - 18:00, Sunday: closed
+  for (let dayOfWeek = 1; dayOfWeek <= 6; dayOfWeek++) {
+    await prisma.schedule.upsert({
+      where: {
+        clinicId_dayOfWeek: {
+          clinicId: clinic.id,
+          dayOfWeek,
+        },
+      },
+      update: {},
+      create: {
         clinicId: clinic.id,
-        name: 'Limpieza',
-        description: 'Dental cleaning',
-        duration: 30,
-        price: 150,
+        dayOfWeek,
+        startTime: '08:00',
+        endTime: '18:00',
+        isActive: true,
       },
     });
   }
-  console.log(`✅ Service created/found: ${service.id}`);
+  console.log(`✅ Schedule created (Mon-Sat: 08:00-18:00)`);
 
   console.log('\n🎉 Database seeded successfully!');
   console.log('\nTest credentials:');
-  console.log(`  Email: dentist@clinic.com`);
+  console.log(`  Email: doctor.garcia@odontosuites.com`);
   console.log(`  Password: secret`);
-  console.log('\nTest IDs:');
+  console.log('\nTest IDs (for appointments):');
   console.log(`  Clinic: ${clinic.id}`);
   console.log(`  Dentist: ${dentist.id}`);
   console.log(`  Patient: ${patient.id}`);
-  console.log(`  Service: ${service.id}`);
+  console.log(`  Service (Cleaning): ${service.id}`);
 }
 
 main()

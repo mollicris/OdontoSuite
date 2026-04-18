@@ -34,7 +34,7 @@ export class CheckAppointmentAvailabilityUseCase {
     const dentist = await this.prisma.user.findUnique({
       where: { id: input.dentistId },
     });
-    if (!dentist || !dentist.isActive) {
+    if (!dentist?.isActive) {
       return { available: false, reason: 'Dentista no disponible' };
     }
 
@@ -42,7 +42,7 @@ export class CheckAppointmentAvailabilityUseCase {
     const service = await this.prisma.service.findUnique({
       where: { id: input.serviceId },
     });
-    if (!service || !service.isActive) {
+    if (!service?.isActive) {
       return { available: false, reason: 'Servicio no disponible' };
     }
 

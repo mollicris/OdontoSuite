@@ -63,13 +63,14 @@ export class AppointmentController {
     @Query('startTime') startTime: string,
     @Query('endTime') endTime: string,
   ) {
-    return this.checkAvailabilityUseCase.execute({
+    const result = await this.checkAvailabilityUseCase.execute({
       clinicId,
       dentistId,
       serviceId,
       startTime,
       endTime,
     });
+    return { data: result };
   }
 
   @Get(':id')

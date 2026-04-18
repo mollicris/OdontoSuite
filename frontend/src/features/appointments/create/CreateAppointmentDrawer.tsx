@@ -1,11 +1,13 @@
 import { Drawer, Stack, Button, Group, TextInput, Select, Alert, Text } from '@mantine/core';
-import { DateInput, TimeInput } from '@mantine/dates';
+import { TimeInput } from '@mantine/dates';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useCreateAppointment } from './hooks/useCreateAppointment';
+import { AppointmentDatePicker } from './components/AppointmentDatePicker';
 
 interface CreateAppointmentDrawerProps {
   opened: boolean;
   onClose: () => void;
+  initialDate?: Date;
 }
 
 const CLINIC_ID = 'f48805c5-e12b-4774-9465-6b29c880d005';
@@ -22,7 +24,7 @@ const mockPatients = [
   { value: '3db4b080-83ef-4b10-a2c8-b81b1a26d6bb', label: 'Juan Pérez' },
 ];
 
-export function CreateAppointmentDrawer({ opened, onClose }: CreateAppointmentDrawerProps) {
+export function CreateAppointmentDrawer({ opened, onClose, initialDate }: CreateAppointmentDrawerProps) {
   const { form, handleSubmit, isLoading, serverError, endTime, availabilityStatus } =
     useCreateAppointment(
       mockServices,
@@ -30,6 +32,7 @@ export function CreateAppointmentDrawer({ opened, onClose }: CreateAppointmentDr
       () => {
         onClose();
       },
+      initialDate,
     );
 
   return (
@@ -58,10 +61,9 @@ export function CreateAppointmentDrawer({ opened, onClose }: CreateAppointmentDr
             {...form.getInputProps('serviceId')}
           />
 
-          <DateInput
-            label="Fecha"
-            placeholder="Selecciona una fecha"
-            {...form.getInputProps('date')}
+          <AppointmentDatePicker
+            value={form.values.date}
+            onChange={(date) => form.setFieldValue('date', date)}
           />
 
           <TimeInput

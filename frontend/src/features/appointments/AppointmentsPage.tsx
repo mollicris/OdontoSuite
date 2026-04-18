@@ -10,6 +10,7 @@ import { useAppointmentStore } from './infrastructure/store/appointment.store';
 export function AppointmentsPage() {
   const [createDrawerOpened, { open: openCreateDrawer, close: closeCreateDrawer }] = useDisclosure(false);
   const [detailDrawerOpened, { open: openDetailDrawer, close: closeDetailDrawer }] = useDisclosure(false);
+  const selectedDate = useAppointmentStore((s) => s.selectedDate);
   const setSelectedAppointmentId = useAppointmentStore((s) => s.setSelectedAppointmentId);
 
   return (
@@ -45,7 +46,7 @@ export function AppointmentsPage() {
         </Grid>
       </Stack>
 
-      <CreateAppointmentDrawer opened={createDrawerOpened} onClose={closeCreateDrawer} />
+      <CreateAppointmentDrawer opened={createDrawerOpened} onClose={closeCreateDrawer} initialDate={selectedDate} />
       <AppointmentDetailDrawer
         opened={detailDrawerOpened}
         onClose={closeDetailDrawer}
