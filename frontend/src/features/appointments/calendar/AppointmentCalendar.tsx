@@ -1,4 +1,4 @@
-import { Stack, Card, Divider, Group, Button, Text, Grid } from '@mantine/core';
+import { Stack, Card, Divider, Button, Text } from '@mantine/core';
 import { useAppointmentStore } from '../infrastructure/store/appointment.store';
 import { AppointmentStatusLegend } from '../list/components/AppointmentStatusLegend';
 
@@ -43,58 +43,55 @@ export function AppointmentCalendar() {
     setSelectedDate(newDate);
   };
 
+  const today = new Date();
+
   return (
     <Card withBorder p="md" style={{ position: 'sticky', top: 0 }}>
       <Stack gap="md">
-        <Group justify="space-between" align="center">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Button size="xs" variant="subtle" onClick={handlePrevMonth}>
             &lt;
           </Button>
-          <Text fw={600} size="sm" style={{ minWidth: 120 }} ta="center">
+          <Text fw={600} size="sm" ta="center" style={{ flex: 1 }}>
             {monthName}
           </Text>
           <Button size="xs" variant="subtle" onClick={handleNextMonth}>
             &gt;
           </Button>
-        </Group>
+        </div>
 
-        <Grid gap={4}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
           {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sab'].map((dayName) => (
-            <Grid.Col key={dayName} span={Math.floor(12 / 7)}>
+            <div key={dayName} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               <Text size="xs" fw={600} ta="center" c="dimmed">
                 {dayName}
               </Text>
-            </Grid.Col>
+            </div>
           ))}
 
           {days.map((day, idx) => {
             const dayKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${day ?? `empty-${idx}`}`;
-            const isSelected =
-              day &&
-              day === selectedDate.getDate() &&
-              selectedDate.getMonth() === new Date().getMonth();
+            const dayDate = day ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day) : null;
+            const isSelected = dayDate && dayDate.toDateString() === selectedDate.toDateString();
+            const isToday = dayDate && dayDate.toDateString() === today.toDateString();
 
             return (
-              <Grid.Col key={dayKey} span={Math.floor(12 / 7)}>
+              <div key={dayKey} style={{ display: 'flex', justifyContent: 'center' }}>
                 {day ? (
                   <Button
                     size="xs"
                     variant={isSelected ? 'light' : 'subtle'}
-                    color={isSelected ? 'blue' : 'gray'}
-                    fullWidth
+                    color={isSelected ? 'blue' : isToday ? 'gray' : 'gray'}
                     onClick={() => handleSelectDay(day)}
-                    p={0}
-                    h={28}
+                    style={{ width: 32, height: 32, padding: 0 }}
                   >
-                    {day}
+                    <Text size="xs">{day}</Text>
                   </Button>
-                ) : (
-                  <div />
-                )}
-              </Grid.Col>
+                ) : null}
+              </div>
             );
           })}
-        </Grid>
+        </div>
 
         <Divider />
 
