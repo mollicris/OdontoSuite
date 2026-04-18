@@ -178,6 +178,26 @@ async function main() {
   }
   console.log(`✅ Schedule created (Mon-Sat: 08:00-18:00)`);
 
+  // Create sample treatment
+  const treatment = await prisma.treatment.upsert({
+    where: { id: 'treatment-sample-001' },
+    update: {},
+    create: {
+      id: 'treatment-sample-001',
+      patientId: patient.id,
+      serviceId: service.id,
+      diagnosis: 'Caries profunda en pieza 16',
+      treatment: 'Obturación con resina compuesta',
+      notes: 'Paciente con antecedente de hipersensibilidad',
+      observations: 'Proceder con cuidado, usar desensibilizante',
+      cost: 150,
+      performedBy: dentist.id,
+      scheduledDate: new Date('2026-04-20T10:00:00'),
+      status: 'PENDING',
+    },
+  });
+  console.log(`✅ Sample treatment created: ${treatment.id}`);
+
   console.log('\n🎉 Database seeded successfully!');
   console.log('\nTest credentials:');
   console.log(`  Email: doctor.garcia@odontosuites.com`);
