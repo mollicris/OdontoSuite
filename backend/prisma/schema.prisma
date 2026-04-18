@@ -1,0 +1,346 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Seed configuration
+// Run with: npm run seed
+// Or automatic: npx prisma migrate dev (if configured in package.json)
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// IDENTITY CONTEXT - Authentication, Authorization
+// ============================================================================
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  permissions String[] // JSON array of permission strings
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String   // Hashed password (bcrypt)
+  firstName     String
+  lastName      String
+  phone         String?
+  avatar        String?
+  isActive      Boolean  @default(true)
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  dentistProfile DentistProfile?
+  appointments   Appointment[]
+  auditLogs      AuditLog[]
+
+  @@index([roleId])
+  @@index([email])
+  @@map("users")
+}
+
+model DentistProfile {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseName      String
+  licenseNumber    String   @unique
+  licenseExpiry    DateTime
+  specialization   String?
+  biography        String?
+  yearsOfExperience Int?
+  isAvailable      Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("dentist_profiles")
+}
+
+// ============================================================================
+// CLINIC CONTEXT - Clinic Management, Services, Schedule
+// ============================================================================
+
+model Clinic {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  phone         String
+  address       String
+  city          String
+  state         String
+  zipCode       String
+  country       String
+  logo          String?
+  website       String?
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  services    Service[]
+  schedules   Schedule[]
+  patients    Patient[]
+  appointments Appointment[]
+
+  @@index([email])
+  @@map("clinics")
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  clinicId    String
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  duration    Int      // in minutes
+  price       Float
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments Appointment[]
+
+  @@index([clinicId])
+  @@map("services")
+}
+
+model Schedule {
+  id        String   @id @default(uuid())
+  clinicId  String
+  clinic    Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  dayOfWeek Int      // 0-6 (Sunday-Saturday)
+  startTime String   // HH:mm format
+  endTime   String   // HH:mm format
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clinicId, dayOfWeek])
+  @@index([clinicId])
+  @@map("schedules")
+}
+
+// ============================================================================
+// PATIENT CONTEXT - Patient Management, Medical History
+// ============================================================================
+
+model Patient {
+  id                  String   @id @default(uuid())
+  clinicId            String
+  clinic              Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  firstName           String
+  lastName            String
+  email               String
+  phone               String
+  dateOfBirth        DateTime
+  gender              String   // M, F, O
+  cpf                 String?  @unique // Documento de identidad
+  address             String?
+  city                String?
+  state               String?
+  zipCode             String?
+  emergencyContact    String?
+  emergencyPhone      String?
+  allergies           String?  // JSON array
+  medicalConditions   String?  // JSON array
+  currentMedications  String?  // JSON array
+  insuranceProvider   String?
+  insurancePolicyNo   String?
+  notes               String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  medicalHistory MedicalHistory[]
+  appointments   Appointment[]
+  treatments     Treatment[]
+  invoices       Invoice[]
+
+  @@index([clinicId])
+  @@index([cpf])
+  @@index([email])
+  @@map("patients")
+}
+
+model MedicalHistory {
+  id              String   @id @default(uuid())
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  date            DateTime
+  diagnosis       String
+  treatment       String?
+  notes           String?
+  attachments     String?  // JSON array of file URLs
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId])
+  @@map("medical_history")
+}
+
+// ============================================================================
+// APPOINTMENT CONTEXT - Appointment Scheduling
+// ============================================================================
+
+model Appointment {
+  id              String   @id @default(uuid())
+  clinicId        String
+  clinic          Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dentistId       String
+  dentist         User     @relation(fields: [dentistId], references: [id])
+  serviceId       String
+  service         Service  @relation(fields: [serviceId], references: [id])
+  startTime       DateTime
+  endTime         DateTime
+  status          String   @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  notes           String?
+  cancelReason    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  treatment Treatment?
+
+  @@index([clinicId])
+  @@index([patientId])
+  @@index([dentistId])
+  @@index([serviceId])
+  @@index([startTime])
+  @@map("appointments")
+}
+
+// ============================================================================
+// TREATMENT CONTEXT - Treatment Planning & Records
+// ============================================================================
+
+model Treatment {
+  id              String   @id @default(uuid())
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentId   String   @unique
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  diagnosis       String
+  treatment       String
+  notes           String?
+  procedure       String?
+  tooth           String?  // e.g., "11", "12" (FDI system)
+  prescriptions   String?  // JSON array
+  attachments     String?  // JSON array of file URLs
+  status          String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([appointmentId])
+  @@map("treatments")
+}
+
+// ============================================================================
+// BILLING CONTEXT - Invoicing & Payments
+// ============================================================================
+
+model Invoice {
+  id              String   @id @default(uuid())
+  clinicId        String?
+  patientId       String
+  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  invoiceNumber   String   @unique
+  date            DateTime @default(now())
+  dueDate         DateTime
+  status          String   @default("PENDING") // PENDING, PAID, OVERDUE, CANCELLED
+  totalAmount     Float
+  paidAmount      Float   @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@index([patientId])
+  @@index([invoiceNumber])
+  @@index([date])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id        String   @id @default(uuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity  Int
+  unitPrice Float
+  total     Float
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id            String   @id @default(uuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount        Float
+  paymentMethod String  // CASH, CREDIT_CARD, DEBIT_CARD, BANK_TRANSFER
+  paymentDate   DateTime @default(now())
+  transactionId String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+// ============================================================================
+// REPORTING CONTEXT - Audit & Analytics
+// ============================================================================
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action        String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entity        String   // User, Patient, Appointment, etc.
+  entityId      String
+  changes       String?  // JSON of what changed
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Analytics {
+  id                  String   @id @default(uuid())
+  date                DateTime @unique @default(now())
+  totalPatients       Int
+  totalAppointments   Int
+  totalRevenue        Float
+  completedTreatments Int
+  averageAppointmentDuration Int
+  appointmentNoShowRate Float
+  createdAt           DateTime @default(now())
+
+  @@index([date])
+  @@map("analytics")
+}
