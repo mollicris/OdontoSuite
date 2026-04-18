@@ -41,6 +41,9 @@ export class LoginUseCase {
         firstName: user.firstName,
         lastName: user.lastName,
         fullName: user.getFullName(),
+        roleId: user.roleId,
+        role: user.role?.name || null,
+        permissions: user.role?.permissions || [],
       },
     };
   }

@@ -9,6 +9,7 @@ export class UserEntity {
   isActive!: boolean;
   emailVerified!: boolean;
   roleId!: string;
+  role?: any; // Role relation
   createdAt!: Date;
   updatedAt!: Date;
 

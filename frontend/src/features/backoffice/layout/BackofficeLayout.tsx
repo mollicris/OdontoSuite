@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from '@tanstack/react-router';
+import { Outlet } from '@tanstack/react-router';
 import {
   AppShell,
   Group,
@@ -8,30 +8,20 @@ import {
   Text,
   Title,
   Burger,
-  NavLink,
-  Stack,
   Box,
   Select,
 } from '@mantine/core';
 import {
-  IconLayoutDashboard,
-  IconUsers,
-  IconCalendar,
-  IconStethoscope,
-  IconReceipt,
-  IconBuildingHospital,
-  IconChartBar,
   IconLogout,
   IconSettings,
 } from '@tabler/icons-react';
 import { useAuthStore } from '../../auth/infrastructure/store/auth.store';
 import { clinicService } from '../../clinic/application/clinic.service';
 import { useClinicStore } from '../../clinic/infrastructure/store/clinic.store';
-import { BACKOFFICE_ROUTES } from '../router/metadata';
+import { RoleBoundMenu } from './RoleBoundMenu';
 
 export function BackofficeLayout() {
   const [mobileOpened, setMobileOpened] = useState(false);
-  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { clinics, selectedClinicId } = useClinicStore();
 
@@ -46,15 +36,6 @@ export function BackofficeLayout() {
     window.location.href = '/auth/login';
   };
 
-  const navItems = [
-    { label: 'Dashboard', icon: IconLayoutDashboard, path: BACKOFFICE_ROUTES.DASHBOARD },
-    { label: 'Pacientes', icon: IconUsers, path: BACKOFFICE_ROUTES.PATIENTS },
-    { label: 'Citas', icon: IconCalendar, path: BACKOFFICE_ROUTES.APPOINTMENTS },
-    { label: 'Tratamientos', icon: IconStethoscope, path: BACKOFFICE_ROUTES.TREATMENTS },
-    { label: 'Facturación', icon: IconReceipt, path: BACKOFFICE_ROUTES.BILLING },
-    { label: 'Clínica', icon: IconBuildingHospital, path: BACKOFFICE_ROUTES.CLINIC },
-    { label: 'Reportes', icon: IconChartBar, path: BACKOFFICE_ROUTES.REPORTS },
-  ];
 
   return (
     <AppShell
@@ -111,17 +92,7 @@ export function BackofficeLayout() {
 
       {/* Navbar */}
       <AppShell.Navbar p="md">
-        <Stack gap={0} h="100%">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              label={item.label}
-              leftSection={<item.icon size={20} />}
-              onClick={() => navigate({ to: item.path })}
-              style={{ cursor: 'pointer' }}
-            />
-          ))}
-        </Stack>
+        <RoleBoundMenu />
       </AppShell.Navbar>
 
       {/* Main content */}

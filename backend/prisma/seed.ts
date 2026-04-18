@@ -1,9 +1,23 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient({ log: ['error'] });
 
 async function main() {
   console.log('🌱 Starting database seed...');
+
+  // Clean up existing test users
+  await prisma.user.deleteMany({
+    where: {
+      email: {
+        in: ['admin@odontosuites.com', 'secretaria@odontosuites.com', 'paciente@odontosuites.com'],
+      },
+    },
+  });
+  console.log('✅ Cleaned up existing test users');
+
+  // Generate password hash for test users
+  const passwordHash = await bcrypt.hash('secret', 10);
 
   // Create default roles
   const patientRole = await prisma.role.upsert({
@@ -41,9 +55,26 @@ async function main() {
     },
   });
 
+  const secretaryRole = await prisma.role.upsert({
+    where: { name: 'secretary' },
+    update: {},
+    create: {
+      name: 'secretary',
+      description: 'Secretary role',
+      permissions: [
+        'read:appointments',
+        'write:appointments',
+        'read:patients',
+        'read:invoices',
+        'write:invoices',
+      ],
+    },
+  });
+
   console.log('✅ Roles created:');
   console.log(`  - Patient: ${patientRole.id}`);
   console.log(`  - Dentist: ${dentistRole.id}`);
+  console.log(`  - Secretary: ${secretaryRole.id}`);
   console.log(`  - Admin: ${adminRole.id}`);
 
   // Create test clinic with specific ID for appointments demo
@@ -72,7 +103,7 @@ async function main() {
     create: {
       id: '64b97af4-bdfa-49d4-8a41-f0b7e5e127cc',
       email: 'doctor.garcia@odontosuites.com',
-      password: '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4/KFm', // password 'secret'
+      password: passwordHash,
       firstName: 'David',
       lastName: 'García',
       phone: '+591 76123456',
@@ -113,6 +144,51 @@ async function main() {
     },
   });
   console.log(`✅ Patient created: ${patient.id}`);
+
+  // Create admin user
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@odontosuites.com' },
+    update: {},
+    create: {
+      email: 'admin@odontosuites.com',
+      password: passwordHash,
+      firstName: 'Administrador',
+      lastName: 'Sistema',
+      phone: '+591 76000000',
+      roleId: adminRole.id,
+    },
+  });
+  console.log(`✅ Admin user created: ${adminUser.id}`);
+
+  // Create secretary user
+  const secretaryUser = await prisma.user.upsert({
+    where: { email: 'secretaria@odontosuites.com' },
+    update: {},
+    create: {
+      email: 'secretaria@odontosuites.com',
+      password: passwordHash,
+      firstName: 'María',
+      lastName: 'López',
+      phone: '+591 76111111',
+      roleId: secretaryRole.id,
+    },
+  });
+  console.log(`✅ Secretary user created: ${secretaryUser.id}`);
+
+  // Create patient user
+  const patientUser = await prisma.user.upsert({
+    where: { email: 'paciente@odontosuites.com' },
+    update: {},
+    create: {
+      email: 'paciente@odontosuites.com',
+      password: passwordHash,
+      firstName: 'Carlos',
+      lastName: 'Martínez',
+      phone: '+591 76222222',
+      roleId: patientRole.id,
+    },
+  });
+  console.log(`✅ Patient user created: ${patientUser.id}`);
 
   // Create test services with specific ID for appointments demo
   const service = await prisma.service.upsert({
@@ -199,9 +275,11 @@ async function main() {
   console.log(`✅ Sample treatment created: ${treatment.id}`);
 
   console.log('\n🎉 Database seeded successfully!');
-  console.log('\nTest credentials:');
-  console.log(`  Email: doctor.garcia@odontosuites.com`);
-  console.log(`  Password: secret`);
+  console.log('\n📋 Test credentials (password: secret):');
+  console.log(`  🔐 Admin: admin@odontosuites.com`);
+  console.log(`  🦷 Dentist: doctor.garcia@odontosuites.com`);
+  console.log(`  📞 Secretary: secretaria@odontosuites.com`);
+  console.log(`  👤 Patient: paciente@odontosuites.com`);
   console.log('\nTest IDs (for appointments):');
   console.log(`  Clinic: ${clinic.id}`);
   console.log(`  Dentist: ${dentist.id}`);

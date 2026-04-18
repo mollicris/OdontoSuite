@@ -2,7 +2,7 @@ import { createRoute, redirect } from '@tanstack/react-router';
 import type { RootRoute } from '@tanstack/react-router';
 import { useAuthStore } from '../../auth/infrastructure/store/auth.store';
 import { BackofficeLayout } from '../layout/BackofficeLayout';
-import { Dashboard } from '../dashboard/Dashboard';
+import { DashboardPage } from '../dashboard/DashboardPage';
 import { PatientList } from '../../patients/list/PatientList';
 import { PatientDetail } from '../../patients/detail/PatientDetail';
 import { AppointmentsPage } from '../../appointments/AppointmentsPage';
@@ -36,7 +36,7 @@ export function createBackofficeRoutes(rootRoute: RootRoute) {
   const dashboardRoute = createRoute({
     getParentRoute: () => backofficeRoute,
     path: 'dashboard',
-    component: Dashboard,
+    component: DashboardPage,
   });
 
   const patientsRoute = createRoute({
