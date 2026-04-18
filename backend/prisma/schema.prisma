@@ -46,6 +46,7 @@ model User {
 
   dentistProfile DentistProfile?
   appointments   Appointment[]
+  treatments     Treatment[]     // treatments performed by this dentist
   auditLogs      AuditLog[]
 
   @@index([roleId])
@@ -113,6 +114,7 @@ model Service {
   updatedAt   DateTime @updatedAt
 
   appointments Appointment[]
+  treatments   Treatment[]
 
   @@index([clinicId])
   @@map("services")
@@ -229,23 +231,32 @@ model Appointment {
 // ============================================================================
 
 model Treatment {
-  id              String   @id @default(uuid())
+  id              String      @id @default(uuid())
   patientId       String
-  patient         Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointmentId   String   @unique
-  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient         Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentId   String?     @unique
+  appointment     Appointment? @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  serviceId       String
+  service         Service     @relation(fields: [serviceId], references: [id])
   diagnosis       String
   treatment       String
   notes           String?
+  observations    String?
   procedure       String?
-  tooth           String?  // e.g., "11", "12" (FDI system)
-  prescriptions   String?  // JSON array
-  attachments     String?  // JSON array of file URLs
-  status          String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  tooth           String?     // e.g., "11", "12" (FDI system)
+  prescriptions   String?     // JSON array
+  attachments     String?     // JSON array of file URLs
+  cost            Float       @default(0)
+  performedBy     String
+  dentist         User        @relation(fields: [performedBy], references: [id])
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  status          String      @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
   @@index([patientId])
+  @@index([serviceId])
   @@index([appointmentId])
   @@map("treatments")
 }
