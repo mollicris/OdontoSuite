@@ -13,6 +13,7 @@ import { CreatePatientDto } from '../application/dtos/create-patient.dto';
 import { UpdatePatientDto } from '../application/dtos/update-patient.dto';
 import { CreatePatientUseCase } from '../application/use-cases/create-patient.use-case';
 import { UpdatePatientUseCase } from '../application/use-cases/update-patient.use-case';
+import { GetPatientUseCase } from '../application/use-cases/get-patient.use-case';
 import { PatientRepository } from '../infrastructure/repositories/patient.repository';
 import { JwtGuard } from '@common/guards/jwt.guard';
 
@@ -24,6 +25,7 @@ export class PatientController {
   constructor(
     private readonly createPatientUseCase: CreatePatientUseCase,
     private readonly updatePatientUseCase: UpdatePatientUseCase,
+    private readonly getPatientUseCase: GetPatientUseCase,
     private readonly patientRepository: PatientRepository,
   ) {}
 
@@ -43,8 +45,7 @@ export class PatientController {
   @ApiResponse({ status: 404, description: 'Patient not found.' })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async getPatient(@Param('id') id: string) {
-    const patient = await this.patientRepository.findById(id);
-    return patient;
+    return this.getPatientUseCase.execute(id);
   }
 
   @Get()

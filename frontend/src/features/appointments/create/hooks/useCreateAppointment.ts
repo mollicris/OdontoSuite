@@ -35,6 +35,7 @@ export function useCreateAppointment(
   clinicId: string,
   onSuccess?: () => void,
   initialDate?: Date,
+  patientId?: string,
 ) {
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -46,7 +47,7 @@ export function useCreateAppointment(
 
   const form = useForm<CreateAppointmentFormValues>({
     initialValues: {
-      patientId: '',
+      patientId: patientId || '',
       dentistId: '',
       serviceId: '',
       date: initialDate || getTodayDate(),

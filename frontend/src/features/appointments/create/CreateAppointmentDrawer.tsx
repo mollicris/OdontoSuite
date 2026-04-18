@@ -8,6 +8,7 @@ interface CreateAppointmentDrawerProps {
   opened: boolean;
   onClose: () => void;
   initialDate?: Date;
+  patientId?: string;
 }
 
 const CLINIC_ID = 'f48805c5-e12b-4774-9465-6b29c880d005';
@@ -24,7 +25,7 @@ const mockPatients = [
   { value: '3db4b080-83ef-4b10-a2c8-b81b1a26d6bb', label: 'Juan Pérez' },
 ];
 
-export function CreateAppointmentDrawer({ opened, onClose, initialDate }: CreateAppointmentDrawerProps) {
+export function CreateAppointmentDrawer({ opened, onClose, initialDate, patientId }: CreateAppointmentDrawerProps) {
   const { form, handleSubmit, isLoading, serverError, endTime, availabilityStatus } =
     useCreateAppointment(
       mockServices,
@@ -33,19 +34,22 @@ export function CreateAppointmentDrawer({ opened, onClose, initialDate }: Create
         onClose();
       },
       initialDate,
+      patientId,
     );
 
   return (
     <Drawer position="right" opened={opened} onClose={onClose} title="Nueva Cita" size="lg">
       <form onSubmit={form.onSubmit(handleSubmit)}>
         <Stack gap="md">
-          <Select
-            label="Paciente"
-            placeholder="Selecciona un paciente"
-            data={mockPatients}
-            {...form.getInputProps('patientId')}
-            searchable
-          />
+          {!patientId && (
+            <Select
+              label="Paciente"
+              placeholder="Selecciona un paciente"
+              data={mockPatients}
+              {...form.getInputProps('patientId')}
+              searchable
+            />
+          )}
 
           <Select
             label="Dentista"

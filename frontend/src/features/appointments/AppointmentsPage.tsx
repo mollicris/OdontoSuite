@@ -1,13 +1,22 @@
 import { Container, Stack, Grid } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { useRole } from '../auth/application/hooks/useRole';
+import { UserRole } from '../auth/domain/roles';
 import { AppointmentsHeader } from './AppointmentsHeader';
 import { AppointmentCalendar } from './calendar/AppointmentCalendar';
 import { AppointmentList } from './list/AppointmentList';
 import { AppointmentDetailDrawer } from './detail/AppointmentDetailDrawer';
 import { CreateAppointmentDrawer } from './create/CreateAppointmentDrawer';
+import { PatientAppointmentsPage } from './patient/PatientAppointmentsPage';
 import { useAppointmentStore } from './infrastructure/store/appointment.store';
 
 export function AppointmentsPage() {
+  const { role } = useRole();
+
+  // Render patient-specific view
+  if (role === UserRole.PATIENT) {
+    return <PatientAppointmentsPage />;
+  }
   const [createDrawerOpened, { open: openCreateDrawer, close: closeCreateDrawer }] = useDisclosure(false);
   const [detailDrawerOpened, { open: openDetailDrawer, close: closeDetailDrawer }] = useDisclosure(false);
   const selectedDate = useAppointmentStore((s) => s.selectedDate);
