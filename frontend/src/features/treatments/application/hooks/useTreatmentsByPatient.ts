@@ -6,7 +6,7 @@ import type { TreatmentStatus } from '../../domain/Treatment.types';
 interface UseTreatmentsByPatientProps {
   patientId?: string;
   status?: TreatmentStatus | 'ALL';
-  serviceId?: string;
+  serviceId?: string | null;
   skip?: number;
   take?: number;
 }
@@ -25,16 +25,16 @@ export function useTreatmentsByPatient({
     refetch,
   } = useQuery({
     queryKey: ['treatments', patientId, status, serviceId, skip, take],
-    queryFn: () =>
-      patientId
-        ? treatmentService.list({
-            patientId,
-            status: status === 'ALL' ? undefined : status,
-            serviceId,
-            skip,
-            take,
-          })
-        : Promise.resolve([]),
+    queryFn: () => {
+      if (!patientId) return Promise.resolve([]);
+      return treatmentService.list({
+        patientId,
+        status: status === 'ALL' ? undefined : status,
+        ...(serviceId ? { serviceId } : {}),
+        skip,
+        take,
+      });
+    },
     enabled: !!patientId,
     staleTime: 30_000,
   });
