@@ -13,6 +13,7 @@
     "dev:all": "concurrently \"npm run backend\" \"npm run dev\""
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
     "@mantine/core": "^9.0.1",
     "@mantine/dates": "^9.0.1",
     "@mantine/form": "^9.0.1",

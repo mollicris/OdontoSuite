@@ -11,7 +11,11 @@ interface TreatmentCardProps {
 }
 
 export function TreatmentCard({ treatment, onView, onChangeStatus, onDelete }: TreatmentCardProps) {
-  const dateStr = new Date(treatment.scheduledDate).toLocaleDateString('es-BO');
+  const date = new Date(treatment.scheduledDate);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const dateStr = `${day}/${month}/${year}`;
 
   return (
     <Card withBorder p="md">
