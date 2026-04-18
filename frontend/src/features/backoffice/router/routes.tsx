@@ -6,6 +6,7 @@ import { Dashboard } from '../dashboard/Dashboard';
 import { PatientList } from '../../patients/list/PatientList';
 import { PatientDetail } from '../../patients/detail/PatientDetail';
 import { AppointmentsPage } from '../../appointments/AppointmentsPage';
+import { TreatmentsPage } from '../../treatments/presentation/TreatmentsPage';
 import { BACKOFFICE_ROUTES } from './metadata';
 
 function PlaceholderPage({ section }: { section: string }) {
@@ -59,7 +60,7 @@ export function createBackofficeRoutes(rootRoute: RootRoute) {
   const treatmentsRoute = createRoute({
     getParentRoute: () => backofficeRoute,
     path: 'treatments',
-    component: () => <PlaceholderPage section="Tratamientos" />,
+    component: TreatmentsPage,
   });
 
   const billingRoute = createRoute({
