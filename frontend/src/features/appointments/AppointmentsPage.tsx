@@ -3,40 +3,54 @@ import { useDisclosure } from '@mantine/hooks';
 import { AppointmentsHeader } from './AppointmentsHeader';
 import { AppointmentCalendar } from './calendar/AppointmentCalendar';
 import { AppointmentList } from './list/AppointmentList';
-import { AppointmentDetail } from './detail/AppointmentDetail';
+import { AppointmentDetailDrawer } from './detail/AppointmentDetailDrawer';
 import { CreateAppointmentDrawer } from './create/CreateAppointmentDrawer';
 import { useAppointmentStore } from './infrastructure/store/appointment.store';
 
 export function AppointmentsPage() {
-  const [drawerOpened, { open: openDrawer, close: closeDrawer }] = useDisclosure(false);
+  const [createDrawerOpened, { open: openCreateDrawer, close: closeCreateDrawer }] = useDisclosure(false);
+  const [detailDrawerOpened, { open: openDetailDrawer, close: closeDetailDrawer }] = useDisclosure(false);
   const setSelectedAppointmentId = useAppointmentStore((s) => s.setSelectedAppointmentId);
 
   return (
     <Container size="xl" py="xl">
       <Stack gap="xl">
-        <AppointmentsHeader onNewAppointment={openDrawer} />
+        <AppointmentsHeader onNewAppointment={openCreateDrawer} />
 
         <Grid gap="md">
-          <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
+          <Grid.Col span={{ base: 12, sm: 12, md: 5 }}>
             <AppointmentCalendar />
           </Grid.Col>
 
-          <Grid.Col span={{ base: 12, sm: 6, md: 6 }}>
+          <Grid.Col span={{ base: 12, sm: 12, md: 7 }}>
             <AppointmentList
-              onSelectAppointment={setSelectedAppointmentId}
-              onViewAppointment={() => {}}
-              onEditAppointment={() => {}}
-              onCancelAppointment={() => {}}
+              onSelectAppointment={(id) => {
+                setSelectedAppointmentId(id);
+                openDetailDrawer();
+              }}
+              onViewAppointment={(id) => {
+                setSelectedAppointmentId(id);
+                openDetailDrawer();
+              }}
+              onEditAppointment={(id) => {
+                setSelectedAppointmentId(id);
+                openDetailDrawer();
+              }}
+              onCancelAppointment={(id) => {
+                setSelectedAppointmentId(id);
+                openDetailDrawer();
+              }}
             />
-          </Grid.Col>
-
-          <Grid.Col span={{ base: 12, sm: 12, md: 3 }}>
-            <AppointmentDetail onRefresh={() => {}} />
           </Grid.Col>
         </Grid>
       </Stack>
 
-      <CreateAppointmentDrawer opened={drawerOpened} onClose={closeDrawer} />
+      <CreateAppointmentDrawer opened={createDrawerOpened} onClose={closeCreateDrawer} />
+      <AppointmentDetailDrawer
+        opened={detailDrawerOpened}
+        onClose={closeDetailDrawer}
+        onRefresh={() => {}}
+      />
     </Container>
   );
 }

@@ -1,11 +1,18 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { appointmentService } from '../../application/appointment.service';
 import type { Appointment, AppointmentStatus } from '../../domain/Appointment.types';
 import type { UpdateAppointmentRequest } from '../../domain/Appointment.request';
 
 export function useUpdateAppointment(appointment: Appointment | null, onSuccess?: () => void) {
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  const invalidateQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    queryClient.invalidateQueries({ queryKey: ['appointment', appointment?.id] });
+  };
 
   const handleStatusChange = async (newStatus: AppointmentStatus) => {
     if (!appointment) return;
@@ -16,6 +23,7 @@ export function useUpdateAppointment(appointment: Appointment | null, onSuccess?
     try {
       const req: UpdateAppointmentRequest = { status: newStatus };
       await appointmentService.update(appointment.id, req);
+      invalidateQueries();
       onSuccess?.();
     } catch (error: any) {
       const message =
@@ -38,6 +46,7 @@ export function useUpdateAppointment(appointment: Appointment | null, onSuccess?
 
     try {
       await appointmentService.cancel(appointment.id, cancelReason);
+      invalidateQueries();
       onSuccess?.();
     } catch (error: any) {
       const message =
@@ -61,6 +70,7 @@ export function useUpdateAppointment(appointment: Appointment | null, onSuccess?
     try {
       const req: UpdateAppointmentRequest = { notes };
       await appointmentService.update(appointment.id, req);
+      invalidateQueries();
       onSuccess?.();
     } catch (error: any) {
       const message =
