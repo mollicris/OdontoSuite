@@ -18,6 +18,10 @@ export class LoginUseCase {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.role) {
+      throw new UnauthorizedException('User role not found');
+    }
+
     const isPasswordValid = await bcrypt.compare(
       loginDto.password,
       user.password,
@@ -42,8 +46,8 @@ export class LoginUseCase {
         lastName: user.lastName,
         fullName: user.getFullName(),
         roleId: user.roleId,
-        role: user.role?.name || null,
-        permissions: user.role?.permissions || [],
+        role: user.role.name,
+        permissions: user.role.permissions,
       },
     };
   }
