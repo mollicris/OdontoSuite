@@ -1,4 +1,5 @@
 import axios, { AxiosError } from 'axios';
+import { useAuthStore } from '../../features/auth/infrastructure/store/auth.store';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -12,7 +13,7 @@ export const httpClient = axios.create({
 // Request interceptor: attach JWT token
 httpClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    const token = useAuthStore.getState().token;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -30,8 +31,7 @@ httpClient.interceptors.response.use(
       const url = error.config?.url || '';
       // No redirigir si es la ruta de login (credenciales inválidas)
       if (!url.includes('/auth/login')) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('authUser');
+        useAuthStore.getState().logout();
         // Redirigir suavemente sin recargar la página
         if (typeof globalThis !== 'undefined' && globalThis.location) {
           globalThis.location.href = '/auth/login';
