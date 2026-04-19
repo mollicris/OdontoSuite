@@ -20,11 +20,8 @@ function PlaceholderPage({ section }: { section: string }) {
 }
 
 const checkAuthBeforeLoad = () => {
-  const { isAuthenticated } = useAuthStore.getState();
-  const stored = typeof window !== 'undefined' ? localStorage.getItem('auth-store') : null;
-  const hasToken = stored ? JSON.parse(stored).state?.token : false;
-
-  if (!isAuthenticated && !hasToken) {
+  const { token } = useAuthStore.getState();
+  if (!token) {
     throw redirect({ to: '/auth/login' as any });
   }
 };
