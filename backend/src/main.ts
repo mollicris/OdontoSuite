@@ -65,7 +65,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
 
-  await app.listen(port, () => {
+  await app.listen(port, '0.0.0.0',() => {
     console.log(`🚀 OdontoSuite API running on port ${port}`);
     console.log(`📚 Swagger UI: http://localhost:${port}/docs`);
   });
