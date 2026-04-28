@@ -5,7 +5,11 @@ import '@mantine/dates/styles.css';
 import './index.css'
 import { Providers } from './core/providers/providers.tsx'
 
-createRoot(document.getElementById('root') as HTMLElement).render(
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Root element not found');
+}
+createRoot(rootElement).render(
   <StrictMode>
     <Providers />
   </StrictMode>,

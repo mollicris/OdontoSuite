@@ -8,6 +8,7 @@ import {
   IconCalendar,
   IconClipboard,
   IconCash,
+  IconReceipt,
   IconSettings,
 } from '@tabler/icons-react';
 
@@ -48,6 +49,12 @@ const menuItems: MenuItem[] = [
     icon: <IconCash size={16} />,
     href: '/backoffice/billing',
     roles: [UserRole.ADMIN, UserRole.SECRETARY],
+  },
+  {
+    label: 'Mis Pagos',
+    icon: <IconReceipt size={16} />,
+    href: '/backoffice/my-payments',
+    roles: [UserRole.PATIENT, UserRole.ADMIN, UserRole.SECRETARY],
   },
   {
     label: 'Configuración',
