@@ -8,6 +8,8 @@ import { PatientList } from '../../patients/list/PatientList';
 import { PatientDetail } from '../../patients/detail/PatientDetail';
 import { AppointmentsPage } from '../../appointments/AppointmentsPage';
 import { TreatmentsPage } from '../../treatments/presentation/TreatmentsPage';
+import { BillingPage } from '../../billing/presentation/BillingPage';
+import { PatientPaymentsPage } from '../../patient/payments/PatientPaymentsPage';
 import { BACKOFFICE_ROUTES } from './metadata';
 
 function PlaceholderPage({ section }: { section: string }) {
@@ -83,8 +85,15 @@ export function createBackofficeRoutes(rootRoute: RootRoute) {
   const billingRoute = createRoute({
     getParentRoute: () => backofficeRoute,
     path: 'billing',
-    component: () => <PlaceholderPage section="Facturación" />,
+    component: BillingPage,
     beforeLoad: checkRoleBeforeLoad([UserRole.ADMIN, UserRole.SECRETARY]),
+  });
+
+  const patientPaymentsRoute = createRoute({
+    getParentRoute: () => backofficeRoute,
+    path: 'my-payments',
+    component: PatientPaymentsPage,
+    beforeLoad: checkRoleBeforeLoad([UserRole.PATIENT, UserRole.ADMIN, UserRole.SECRETARY]),
   });
 
   const clinicRoute = createRoute({
@@ -109,6 +118,7 @@ export function createBackofficeRoutes(rootRoute: RootRoute) {
       appointmentsRoute,
       treatmentsRoute,
       billingRoute,
+      patientPaymentsRoute,
       clinicRoute,
       reportsRoute,
     ]),

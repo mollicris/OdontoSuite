@@ -24,6 +24,8 @@
     "@tanstack/react-router": "^1.168.19",
     "axios": "^1.15.0",
     "dayjs": "^1.11.20",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-helmet-async": "^3.0.0",
