@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useForm } from '@mantine/form';
+import { useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
+import { format, getDate, getMonth, getYear, addMinutes } from 'date-fns';
 import { appointmentService } from '../../application/appointment.service';
 import { checkAppointmentAvailability } from '../../infrastructure/api/appointment.api';
 import { getTodayDate } from '../../infrastructure/utils/dateUtils';
@@ -43,7 +45,9 @@ export function useCreateAppointment(
     available: null,
     loading: false,
   });
-  const selectedClinicId = clinicId || useClinicStore((s) => s.selectedClinicId);
+  const storedClinicId = useClinicStore((s) => s.selectedClinicId);
+  const selectedClinicId = clinicId || storedClinicId;
+  const queryClient = useQueryClient();
 
   const form = useForm<CreateAppointmentFormValues>({
     initialValues: {
@@ -81,11 +85,13 @@ export function useCreateAppointment(
     if (!selectedService || !form.values.startTime) return '';
 
     const [hours, minutes] = form.values.startTime.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    date.setMinutes(date.getMinutes() + selectedService.duration);
+    const startDate = new Date();
+    startDate.setHours(hours, minutes, 0, 0);
 
-    return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
+    // Use date-fns to add minutes safely
+    const endDate = addMinutes(startDate, selectedService.duration);
+
+    return format(endDate, 'HH:mm');
   }, [selectedService, form.values.startTime]);
 
   useEffect(() => {
@@ -111,22 +117,27 @@ export function useCreateAppointment(
 
       try {
         const [hours, minutes] = form.values.startTime.split(':').map(Number);
-        const year = form.values.date.getFullYear();
-        const month = String(form.values.date.getMonth() + 1).padStart(2, '0');
-        const day = String(form.values.date.getDate()).padStart(2, '0');
-        const startTimeStr = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-        const startDateTime = new Date(startTimeStr);
-
         const [endHours, endMinutes] = endTime.split(':').map(Number);
+
+        // Ensure date is a Date object and has hours set to 0
+        const dateObj = form.values.date instanceof Date ? form.values.date : new Date(form.values.date as any);
+        dateObj.setHours(0, 0, 0, 0);
+
+        // Use date-fns to format the date correctly without timezone issues
+        const year = getYear(dateObj);
+        const month = String(getMonth(dateObj) + 1).padStart(2, '0');
+        const day = String(getDate(dateObj)).padStart(2, '0');
+
+        // Enviar sin Z para que el backend las interprete como La Paz local time
+        const startTimeStr = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
         const endTimeStr = `${year}-${month}-${day}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
-        const endDateTime = new Date(endTimeStr);
 
         const result = await checkAppointmentAvailability(
           selectedClinicId,
           form.values.dentistId,
           form.values.serviceId,
-          startDateTime.toISOString(),
-          endDateTime.toISOString(),
+          startTimeStr,
+          endTimeStr,
         );
 
         setAvailabilityStatus({
@@ -134,11 +145,13 @@ export function useCreateAppointment(
           loading: false,
           reason: result.reason,
         });
-      } catch (error) {
+      } catch (error: any) {
+        console.error('Availability check error:', error);
+        const errorMessage = error?.response?.data?.message || error?.message || 'Error al verificar disponibilidad';
         setAvailabilityStatus({
           available: false,
           loading: false,
-          reason: 'Error al verificar disponibilidad',
+          reason: errorMessage,
         });
       }
     };
@@ -164,27 +177,33 @@ export function useCreateAppointment(
 
     try {
       const [hours, minutes] = values.startTime.split(':').map(Number);
-      const year = values.date.getFullYear();
-      const month = String(values.date.getMonth() + 1).padStart(2, '0');
-      const day = String(values.date.getDate()).padStart(2, '0');
-      const startTimeStr = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
-      const startDateTime = new Date(startTimeStr);
-
       const [endHours, endMinutes] = endTime.split(':').map(Number);
+
+      // Ensure date is a Date object and has hours set to 0
+      const dateObj = values.date instanceof Date ? values.date : new Date(values.date as any);
+      dateObj.setHours(0, 0, 0, 0);
+
+      // Use date-fns to format the date correctly without timezone issues
+      const year = getYear(dateObj);
+      const month = String(getMonth(dateObj) + 1).padStart(2, '0');
+      const day = String(getDate(dateObj)).padStart(2, '0');
+
+      const startTimeStr = `${year}-${month}-${day}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
       const endTimeStr = `${year}-${month}-${day}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
-      const endDateTime = new Date(endTimeStr);
 
       const req: CreateAppointmentRequest = {
         clinicId: selectedClinicId,
         patientId: values.patientId,
         dentistId: values.dentistId,
         serviceId: values.serviceId,
-        startTime: startDateTime.toISOString(),
-        endTime: endDateTime.toISOString(),
+        startTime: startTimeStr,
+        endTime: endTimeStr,
         notes: values.notes || undefined,
       };
 
       await appointmentService.create(req);
+      // Invalidate appointments list to refresh it
+      await queryClient.invalidateQueries({ queryKey: ['appointments'] });
       form.reset();
       onSuccess?.();
     } catch (error: any) {

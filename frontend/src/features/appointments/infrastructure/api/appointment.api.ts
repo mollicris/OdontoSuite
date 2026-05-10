@@ -56,5 +56,5 @@ export async function checkAppointmentAvailability(
       params: { clinicId, dentistId, serviceId, startTime, endTime },
     },
   );
-  return res.data.data;
+  return res.data.data as { available: boolean; reason?: string };
 }

@@ -8,6 +8,7 @@ import { AppointmentModule } from './appointment/appointment.module';
 import { TreatmentModule } from './treatment/treatment.module';
 import { BillingModule } from './billing/billing.module';
 import { ClinicModule } from './clinic/clinic.module';
+import { ServiceModule } from './service/service.module';
 import { ReportingModule } from './reporting/reporting.module';
 import { HealthController } from './health.controller';
 
@@ -30,6 +31,7 @@ import { HealthController } from './health.controller';
     TreatmentModule,
     BillingModule,
     ClinicModule,
+    ServiceModule,
     ReportingModule,
   ],
   controllers: [HealthController],

@@ -7,6 +7,8 @@ import {
   Query,
   UseGuards,
   Patch,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateAppointmentDto } from '../application/dtos/create-appointment.dto';
@@ -38,13 +40,16 @@ export class AppointmentController {
 
   @Get()
   async listAppointments(
-    @Query('clinicId') clinicId: string,
+    @Query('clinicId') clinicId?: string,
     @Query('date') date?: string,
     @Query('status') status?: string,
     @Query('dentistId') dentistId?: string,
     @Query('skip') skip = 0,
     @Query('take') take = 10,
   ) {
+    if (!clinicId) {
+      throw new BadRequestException('clinicId is required');
+    }
     return this.listAppointmentsUseCase.execute({
       clinicId,
       date,
@@ -63,21 +68,20 @@ export class AppointmentController {
     @Query('startTime') startTime: string,
     @Query('endTime') endTime: string,
   ) {
-    const result = await this.checkAvailabilityUseCase.execute({
+    return this.checkAvailabilityUseCase.execute({
       clinicId,
       dentistId,
       serviceId,
       startTime,
       endTime,
     });
-    return { data: result };
   }
 
   @Get(':id')
   async getAppointment(@Param('id') id: string) {
     const appointment = await this.appointmentRepository.findById(id);
     if (!appointment) {
-      throw new Error('Appointment not found');
+      throw new NotFoundException('Appointment not found');
     }
     return this.mapToResponseDto(appointment);
   }

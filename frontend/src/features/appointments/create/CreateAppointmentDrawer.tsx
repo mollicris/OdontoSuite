@@ -1,8 +1,11 @@
-import { Drawer, Stack, Button, Group, TextInput, Select, Alert, Text } from '@mantine/core';
-import { TimeInput } from '@mantine/dates';
+import { Drawer, Stack, Button, Group, TextInput, Select, Alert, Text, Loader, Center } from '@mantine/core';
+import { TimeInput, DateInput } from '@mantine/dates';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { useCreateAppointment } from './hooks/useCreateAppointment';
-import { AppointmentDatePicker } from './components/AppointmentDatePicker';
+import { useServices } from '../application/hooks/useServices';
+import { useDentists } from '../application/hooks/useDentists';
+import { usePatientsList } from '../application/hooks/usePatientsList';
+import { useClinicStore } from '../../clinic/infrastructure/store/clinic.store';
 
 interface CreateAppointmentDrawerProps {
   opened: boolean;
@@ -11,31 +14,45 @@ interface CreateAppointmentDrawerProps {
   patientId?: string;
 }
 
-const CLINIC_ID = 'f48805c5-e12b-4774-9465-6b29c880d005';
-
-const mockServices = [
-  { id: '3388d40d-c3ec-4b3a-b5b4-2c4d20651b3d', name: 'Limpieza', duration: 30 },
-];
-
-const mockDentists = [
-  { value: '64b97af4-bdfa-49d4-8a41-f0b7e5e127cc', label: 'Dr. García' },
-];
-
-const mockPatients = [
-  { value: '3db4b080-83ef-4b10-a2c8-b81b1a26d6bb', label: 'Juan Pérez' },
-];
-
 export function CreateAppointmentDrawer({ opened, onClose, initialDate, patientId }: CreateAppointmentDrawerProps) {
+  const clinicId = useClinicStore((state) => state.selectedClinicId);
+
+  const { services = [], isLoading: servicesLoading } = useServices(clinicId || '');
+  const { dentistOptions = [], isLoading: dentistsLoading } = useDentists(clinicId || '');
+  const { patients = [], isLoading: patientsLoading } = usePatientsList(clinicId || '');
+
+  const servicesOptions = Array.isArray(services) ? services.map((s) => ({
+    value: s.id,
+    label: `${s.name} (${s.duration} min)`,
+  })) : [];
+
+  const patientsOptions = Array.isArray(patients) ? patients.map((p) => ({
+    value: p.id,
+    label: `${p.firstName} ${p.lastName}`,
+  })) : [];
+
   const { form, handleSubmit, isLoading, serverError, endTime, availabilityStatus } =
     useCreateAppointment(
-      mockServices,
-      CLINIC_ID,
+      services,
+      clinicId || '',
       () => {
         onClose();
       },
       initialDate,
       patientId,
     );
+
+  const isDataLoading = servicesLoading || dentistsLoading || patientsLoading;
+
+  if (isDataLoading) {
+    return (
+      <Drawer position="right" opened={opened} onClose={onClose} title="Nueva Cita" size="lg">
+        <Center py="xl">
+          <Loader />
+        </Center>
+      </Drawer>
+    );
+  }
 
   return (
     <Drawer position="right" opened={opened} onClose={onClose} title="Nueva Cita" size="lg">
@@ -45,7 +62,7 @@ export function CreateAppointmentDrawer({ opened, onClose, initialDate, patientI
             <Select
               label="Paciente"
               placeholder="Selecciona un paciente"
-              data={mockPatients}
+              data={patientsOptions}
               {...form.getInputProps('patientId')}
               searchable
             />
@@ -54,20 +71,24 @@ export function CreateAppointmentDrawer({ opened, onClose, initialDate, patientI
           <Select
             label="Dentista"
             placeholder="Selecciona un dentista"
-            data={mockDentists}
+            data={dentistOptions}
             {...form.getInputProps('dentistId')}
           />
 
           <Select
             label="Servicio"
             placeholder="Selecciona un servicio"
-            data={mockServices.map((s) => ({ value: s.id, label: `${s.name} (${s.duration} min)` }))}
+            data={servicesOptions}
             {...form.getInputProps('serviceId')}
           />
 
-          <AppointmentDatePicker
-            value={form.values.date}
-            onChange={(date) => form.setFieldValue('date', date)}
+          <DateInput
+            label="Fecha"
+            placeholder="Selecciona una fecha"
+            valueFormat="DD/MM/YYYY"
+            {...form.getInputProps('date')}
+            clearable
+            highlightToday
           />
 
           <TimeInput
