@@ -43,6 +43,7 @@ export function AppointmentCalendar() {
 
   const handleSelectDay = (day: number) => {
     const newDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+    newDate.setHours(0, 0, 0, 0);
     setSelectedDate(newDate);
   };
 

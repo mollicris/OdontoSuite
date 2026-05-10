@@ -30,26 +30,52 @@ export class AppointmentRepository {
       status: appointment.status,
     });
 
-    const created = await this.prisma.appointment.create({
-      data: {
-        clinicId: appointment.clinicId,
-        patientId: appointment.patientId,
-        dentistId: appointment.dentistId,
-        serviceId: appointment.serviceId,
-        startTime: appointment.startTime,
-        endTime: appointment.endTime,
-        status: appointment.status,
-        notes: appointment.notes,
-      },
-      include: {
-        patient: true,
-        dentist: true,
-        service: true,
-      },
-    });
+    try {
+      // Verify all IDs exist before attempting to create
+      const [patient, dentist, service, clinic] = await Promise.all([
+        this.prisma.patient.findUnique({ where: { id: appointment.patientId } }),
+        this.prisma.user.findUnique({ where: { id: appointment.dentistId } }),
+        this.prisma.service.findUnique({ where: { id: appointment.serviceId } }),
+        this.prisma.clinic.findUnique({ where: { id: appointment.clinicId } }),
+      ]);
 
-    console.log('✅ AppointmentRepository.create - Success:', created.id);
-    return new AppointmentEntity(this.mapPrismaToEntity(created)) as any;
+      if (!clinic) {
+        throw new Error(`Clinic with ID ${appointment.clinicId} not found`);
+      }
+      if (!patient) {
+        throw new Error(`Patient with ID ${appointment.patientId} not found`);
+      }
+      if (!dentist) {
+        throw new Error(`Dentist with ID ${appointment.dentistId} not found`);
+      }
+      if (!service) {
+        throw new Error(`Service with ID ${appointment.serviceId} not found`);
+      }
+
+      const created = await this.prisma.appointment.create({
+        data: {
+          clinicId: appointment.clinicId,
+          patientId: appointment.patientId,
+          dentistId: appointment.dentistId,
+          serviceId: appointment.serviceId,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+          status: appointment.status,
+          notes: appointment.notes,
+        },
+        include: {
+          patient: true,
+          dentist: true,
+          service: true,
+        },
+      });
+
+      console.log('✅ AppointmentRepository.create - Success:', created.id);
+      return new AppointmentEntity(this.mapPrismaToEntity(created)) as any;
+    } catch (error: any) {
+      console.error('❌ AppointmentRepository.create - Error:', error?.message);
+      throw error;
+    }
   }
 
   async findById(
