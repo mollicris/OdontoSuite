@@ -94,7 +94,7 @@ export function CreatePatientDrawer({ opened, onClose, onSuccess }: CreatePatien
                   {...form.getInputProps('gender')}
                 />
 
-                <TextInput label="CPF / Documento" placeholder="" {...form.getInputProps('cpf')} />
+                <TextInput label="Documento" placeholder="" {...form.getInputProps('cpf')} />
 
                 <TextInput
                   label="Dirección"
@@ -105,15 +105,15 @@ export function CreatePatientDrawer({ opened, onClose, onSuccess }: CreatePatien
                 <Group grow>
                   <TextInput label="Ciudad" placeholder="" {...form.getInputProps('city')} />
                   <TextInput
-                    label="Estado/Departamento"
+                    label="Pais"
                     placeholder=""
                     {...form.getInputProps('state')}
                   />
-                  <TextInput
+                  {/* <TextInput
                     label="Código Postal"
                     placeholder=""
                     {...form.getInputProps('zipCode')}
-                  />
+                  /> */}
                 </Group>
               </Stack>
             </Tabs.Panel>
