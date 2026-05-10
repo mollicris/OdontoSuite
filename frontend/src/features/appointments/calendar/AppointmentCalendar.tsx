@@ -1,7 +1,7 @@
 import { Stack, Card, Divider, Button, Text, Modal, NumberInput } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { useAppointmentStore } from '../infrastructure/store/appointment.store';
-import { getTodayDate } from '../infrastructure/utils/dateUtils';
+import { getTodayDate, createLocalDate } from '../infrastructure/utils/dateUtils';
 import { AppointmentStatusLegend } from '../list/components/AppointmentStatusLegend';
 
 export function AppointmentCalendar() {
@@ -42,8 +42,7 @@ export function AppointmentCalendar() {
   };
 
   const handleSelectDay = (day: number) => {
-    const newDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
-    newDate.setHours(0, 0, 0, 0);
+    const newDate = createLocalDate(selectedDate.getFullYear(), selectedDate.getMonth(), day);
     setSelectedDate(newDate);
   };
 
@@ -90,7 +89,7 @@ export function AppointmentCalendar() {
 
             {days.map((day, idx) => {
               const dayKey = day ? `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${day}` : `empty-${idx}`;
-              const dayDate = day ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day) : null;
+              const dayDate = day ? createLocalDate(selectedDate.getFullYear(), selectedDate.getMonth(), day) : null;
               const isSelected = dayDate?.toDateString() === selectedDate.toDateString();
               const isToday = dayDate?.toDateString() === today.toDateString();
 
