@@ -4,6 +4,14 @@ export function getTodayDate(): Date {
   return today;
 }
 
+export function createLocalDate(year: number, month: number, day: number): Date {
+  // Create a date at midnight local time without timezone offset issues
+  const date = new Date(year, month, day, 0, 0, 0, 0);
+  // Ensure hours are exactly 0
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
 export function formatDateToISO(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useClinicStore } from '../../../clinic/infrastructure/store/clinic.store';
 import { useAppointmentStore } from '../../infrastructure/store/appointment.store';
 import { appointmentService } from '../../application/appointment.service';
+import { formatDateToISO } from '../../infrastructure/utils/dateUtils';
 
 export function useAppointmentList() {
   const selectedClinicId = useClinicStore((s) => s.selectedClinicId);
@@ -12,10 +13,7 @@ export function useAppointmentList() {
   const searchQuery = useAppointmentStore((s) => s.searchQuery);
 
   const dateStr = useMemo(() => {
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(selectedDate.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return formatDateToISO(selectedDate);
   }, [selectedDate]);
 
   const {

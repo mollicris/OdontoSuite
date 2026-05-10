@@ -29,10 +29,17 @@ export class ListAppointmentsUseCase {
     let endDate: Date | undefined;
 
     if (date) {
-      startDate = new Date(date);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(date);
-      endDate.setHours(23, 59, 59, 999);
+      // Parse date string (YYYY-MM-DD) as La Paz local time (UTC-4)
+      const parts = date.split('-');
+      const year = Number.parseInt(parts[0], 10);
+      const month = Number.parseInt(parts[1], 10);
+      const day = Number.parseInt(parts[2], 10);
+
+      // La Paz start of day (00:00:00) = UTC 04:00:00
+      startDate = new Date(Date.UTC(year, month - 1, day, 4, 0, 0, 0));
+
+      // La Paz end of day (23:59:59) = UTC next day 03:59:59
+      endDate = new Date(Date.UTC(year, month - 1, day + 1, 3, 59, 59, 999));
     }
 
     const appointments = await this.appointmentRepository.findByClinic(
