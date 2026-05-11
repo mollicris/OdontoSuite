@@ -19,7 +19,7 @@ async function bootstrap() {
   console.log('🚀 Starting OdontoSuite backend...');
   const app = await NestFactory.create(AppModule);
 
-  const port = process.env.PORT || 3000;
+  const port = parseInt(process.env.PORT || '3000', 10);
   console.log(`📍 Port: ${port}`);
 
   app.use(helmet());
