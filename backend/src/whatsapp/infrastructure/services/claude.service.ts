@@ -175,15 +175,17 @@ Responde en español, máximo 3 líneas.`;
   private async executeTool(name: string, input: Record<string, any>, clinicId: string): Promise<string> {
     switch (name) {
       case 'get_dentists': {
+        console.log(`🔍 [Claude] Buscando dentistas para clínica ${input.clinic_id}${input.specialty ? ` especialidad: ${input.specialty}` : ''}`);
         const dentists = await this.prisma.user.findMany({
           where: {
             dentistProfile: {
               clinicId: input.clinic_id,
-              ...(input.specialty ? { specialization: { contains: input.specialty, mode: 'insensitive' } } : {}),
+              ...(input.specialty ? { specialization: { contains: input.specialty } } : {}),
             },
           },
           include: { dentistProfile: true },
         });
+        console.log(`✅ [Claude] Dentistas encontrados: ${dentists.length}`);
         if (!dentists.length) return 'No hay dentistas disponibles para esa especialidad.';
         const list = dentists.map((d: any) => `• ${d.firstName} ${d.lastName} (${d.dentistProfile.specialization}) — ID: ${d.id}`).join('\n');
         return `Dentistas disponibles:\n${list}\n\nEscribe el nombre del dentista de tu preferencia.`;
