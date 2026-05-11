@@ -36,6 +36,8 @@ export class WhatsAppController {
   @Post('webhook')
   @HttpCode(200)
   async receiveMessage(@Body() body: any): Promise<string> {
+    console.log('📨 [WhatsApp] Webhook recibido:', JSON.stringify(body).substring(0, 200));
+
     setImmediate(async () => {
       try {
         if (body?.object === 'whatsapp_business_account' && body?.entry?.[0]?.changes?.[0]?.value?.messages) {
@@ -44,14 +46,23 @@ export class WhatsAppController {
           const messageText: string = message.text?.body ?? '';
           const whatsappMsgId: string = message.id;
 
-          if (!messageText) return;
+          console.log(`📱 [WhatsApp] Mensaje de ${senderPhone}: "${messageText}"`);
 
+          if (!messageText) {
+            console.log('⚠️ [WhatsApp] Mensaje vacío, ignorando');
+            return;
+          }
+
+          console.log('⏳ [WhatsApp] Procesando mensaje...');
           await this.processMessageUseCase.execute({
             senderPhone,
             messageText,
             whatsappMsgId,
             clinicId: this.defaultClinicId,
           });
+          console.log('✅ [WhatsApp] Mensaje procesado exitosamente');
+        } else {
+          console.log('⚠️ [WhatsApp] Webhook recibido pero no es un mensaje válido');
         }
 
         const entry = body?.entry?.[0];
