@@ -36,34 +36,53 @@ export class WhatsAppController {
   @Post('webhook')
   @HttpCode(200)
   async receiveMessage(@Body() body: any): Promise<string> {
-    console.log('📨 [WhatsApp] Webhook recibido:', JSON.stringify(body).substring(0, 200));
+    console.log('📨 [WhatsApp] Webhook recibido:', JSON.stringify(body).substring(0, 500));
 
     setImmediate(async () => {
       try {
-        if (body?.object === 'whatsapp_business_account' && body?.entry?.[0]?.changes?.[0]?.value?.messages) {
-          const message = body.entry[0].changes[0].value.messages[0];
-          const senderPhone: string = message.from;
-          const messageText: string = message.text?.body ?? '';
-          const whatsappMsgId: string = message.id;
-
-          console.log(`📱 [WhatsApp] Mensaje de ${senderPhone}: "${messageText}"`);
-
-          if (!messageText) {
-            console.log('⚠️ [WhatsApp] Mensaje vacío, ignorando');
-            return;
-          }
-
-          console.log('⏳ [WhatsApp] Procesando mensaje...');
-          await this.processMessageUseCase.execute({
-            senderPhone,
-            messageText,
-            whatsappMsgId,
-            clinicId: this.defaultClinicId,
-          });
-          console.log('✅ [WhatsApp] Mensaje procesado exitosamente');
-        } else {
-          console.log('⚠️ [WhatsApp] Webhook recibido pero no es un mensaje válido');
+        if (!body?.object || body.object !== 'whatsapp_business_account') {
+          console.log('⚠️ [WhatsApp] Webhook recibido pero no es de WhatsApp');
+          return;
         }
+
+        const entry = body?.entry?.[0];
+        const changes = entry?.changes?.[0];
+        const value = changes?.value;
+
+        if (!value) {
+          console.log('⚠️ [WhatsApp] Estructura de webhook vacía');
+          return;
+        }
+
+        // Intentar obtener mensajes de la estructura
+        const messages = value?.messages;
+
+        if (!messages || messages.length === 0) {
+          console.log('ℹ️ [WhatsApp] Webhook recibido pero no contiene mensajes (puede ser estatus)');
+          console.log('📋 [WhatsApp] Contenido del webhook:', JSON.stringify(value).substring(0, 300));
+          return;
+        }
+
+        const message = messages[0];
+        const senderPhone: string = message.from;
+        const messageText: string = message.text?.body ?? '';
+        const whatsappMsgId: string = message.id;
+
+        console.log(`📱 [WhatsApp] Mensaje de ${senderPhone}: "${messageText}"`);
+
+        if (!messageText) {
+          console.log('⚠️ [WhatsApp] Mensaje vacío, ignorando');
+          return;
+        }
+
+        console.log('⏳ [WhatsApp] Procesando mensaje...');
+        await this.processMessageUseCase.execute({
+          senderPhone,
+          messageText,
+          whatsappMsgId,
+          clinicId: this.defaultClinicId,
+        });
+        console.log('✅ [WhatsApp] Mensaje procesado exitosamente');
       } catch (err) {
         console.error('❌ [WhatsApp] Error procesando mensaje:', err);
       }
