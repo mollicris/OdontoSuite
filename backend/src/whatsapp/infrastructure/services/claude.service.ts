@@ -97,6 +97,9 @@ export class ClaudeService implements IClaudeService {
     patientPhone: string;
     clinicId: string;
   }): Promise<ClaudeToolResult> {
+    console.log(`🤖 [Claude] Iniciando chat para ${params.patientPhone} en clínica ${params.clinicId}`);
+    console.log(`📝 [Claude] Mensajes en historial: ${params.messages.length}`);
+
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
@@ -116,6 +119,8 @@ Flujos:
 Responde en español, máximo 3 líneas.`;
 
     let messages = params.messages as Anthropic.MessageParam[];
+    console.log(`🔄 [Claude] Llamando a API con ${messages.length} mensajes`);
+
     let response = await this.anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
@@ -124,17 +129,24 @@ Responde en español, máximo 3 líneas.`;
       messages,
     });
 
+    console.log(`💬 [Claude] Respuesta recibida. Stop reason: ${response.stop_reason}`);
+
     let loopCount = 0;
     while (response.stop_reason === 'tool_use' && loopCount < 10) {
       loopCount++;
+      console.log(`🔧 [Claude] Iteración ${loopCount}: Procesando herramientas`);
       const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+      console.log(`🔨 [Claude] Herramientas a ejecutar: ${toolUses.map(t => t.name).join(', ')}`);
 
       const toolResults = await Promise.all(
         toolUses.map(async tool => {
           try {
+            console.log(`⚙️ [Claude] Ejecutando herramienta: ${tool.name}`);
             const content = await this.executeTool(tool.name, tool.input as Record<string, any>, params.clinicId);
+            console.log(`✅ [Claude] Herramienta ${tool.name} ejecutada exitosamente`);
             return { type: 'tool_result' as const, tool_use_id: tool.id, content };
           } catch (err: any) {
+            console.error(`❌ [Claude] Error en herramienta ${tool.name}:`, err.message);
             return { type: 'tool_result' as const, tool_use_id: tool.id, content: `Error: ${err.message}`, is_error: true };
           }
         }),
@@ -156,6 +168,7 @@ Responde en español, máximo 3 líneas.`;
     }
 
     const text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? '';
+    console.log(`📤 [Claude] Respuesta final: "${text.substring(0, 100)}..."`);
     return { reply: text };
   }
 
