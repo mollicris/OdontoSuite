@@ -93,10 +93,11 @@ model Clinic {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  services    Service[]
-  schedules   Schedule[]
-  patients    Patient[]
-  appointments Appointment[]
+  services              Service[]
+  schedules             Schedule[]
+  patients              Patient[]
+  appointments          Appointment[]
+  whatsAppConversations WhatsAppConversation[]
 
   @@index([email])
   @@map("clinics")
@@ -168,10 +169,11 @@ model Patient {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  medicalHistory MedicalHistory[]
-  appointments   Appointment[]
-  treatments     Treatment[]
-  invoices       Invoice[]
+  medicalHistory       MedicalHistory[]
+  appointments         Appointment[]
+  treatments           Treatment[]
+  invoices             Invoice[]
+  whatsAppConversations WhatsAppConversation[]
 
   @@index([clinicId])
   @@index([cpf])
@@ -355,4 +357,39 @@ model Analytics {
 
   @@index([date])
   @@map("analytics")
+}
+
+// ============================================================================
+// WHATSAPP CONTEXT - WhatsApp Integration & Conversations
+// ============================================================================
+
+model WhatsAppConversation {
+  id            String             @id @default(cuid())
+  patientPhone  String
+  patientId     String?
+  clinicId      String
+  messages      WhatsAppMessage[]
+  lastActivity  DateTime           @default(now()) @updatedAt
+  createdAt     DateTime           @default(now())
+
+  patient       Patient?           @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  clinic        Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  @@index([patientPhone])
+  @@index([clinicId])
+  @@map("whatsapp_conversations")
+}
+
+model WhatsAppMessage {
+  id              String                  @id @default(cuid())
+  conversationId  String
+  role            String                  // 'user' | 'assistant'
+  content         String
+  whatsappMsgId   String?                 // ID del mensaje en Meta API
+  createdAt       DateTime                @default(now())
+
+  conversation    WhatsAppConversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("whatsapp_messages")
 }

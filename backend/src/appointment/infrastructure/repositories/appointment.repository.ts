@@ -199,6 +199,19 @@ export class AppointmentRepository {
     return new AppointmentEntity(this.mapPrismaToEntity(updated)) as any;
   }
 
+  async findByPhone(
+    patientPhone: string,
+    clinicId: string,
+  ): Promise<(AppointmentEntity & { patient: any; dentist: any; service: any })[] | null> {
+    const patient = await this.prisma.patient.findFirst({
+      where: { phone: patientPhone, clinicId },
+    });
+
+    if (!patient) return null;
+
+    return this.findByPatient(patient.id);
+  }
+
   async updateStatus(
     id: string,
     status: AppointmentStatus,
