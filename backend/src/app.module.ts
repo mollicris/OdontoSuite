@@ -10,6 +10,7 @@ import { BillingModule } from './billing/billing.module';
 import { ClinicModule } from './clinic/clinic.module';
 import { ServiceModule } from './service/service.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -33,6 +34,7 @@ import { HealthController } from './health.controller';
     ClinicModule,
     ServiceModule,
     ReportingModule,
+    WhatsAppModule,
   ],
   controllers: [HealthController],
 })
