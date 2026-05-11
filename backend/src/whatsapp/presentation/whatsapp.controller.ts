@@ -36,7 +36,7 @@ export class WhatsAppController {
   @Post('webhook')
   @HttpCode(200)
   async receiveMessage(@Body() body: any): Promise<string> {
-    console.log('📨 [WhatsApp] Webhook recibido:', JSON.stringify(body).substring(0, 500));
+    // console.log('📨 [WhatsApp] Webhook recibido:', JSON.stringify(body).substring(0, 500));
 
     setImmediate(async () => {
       try {

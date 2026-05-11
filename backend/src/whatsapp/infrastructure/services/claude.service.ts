@@ -176,19 +176,44 @@ Responde en español, máximo 3 líneas.`;
     switch (name) {
       case 'get_dentists': {
         console.log(`🔍 [Claude] Buscando dentistas para clínica ${input.clinic_id}${input.specialty ? ` especialidad: ${input.specialty}` : ''}`);
-        const dentists = await this.prisma.user.findMany({
-          where: {
-            dentistProfile: {
-              clinicId: input.clinic_id,
-              ...(input.specialty ? { specialization: { contains: input.specialty } } : {}),
-            },
-          },
-          include: { dentistProfile: true },
-        });
-        console.log(`✅ [Claude] Dentistas encontrados: ${dentists.length}`);
-        if (!dentists.length) return 'No hay dentistas disponibles para esa especialidad.';
-        const list = dentists.map((d: any) => `• ${d.firstName} ${d.lastName} (${d.dentistProfile.specialization}) — ID: ${d.id}`).join('\n');
-        return `Dentistas disponibles:\n${list}\n\nEscribe el nombre del dentista de tu preferencia.`;
+        try {
+          // Obtener IDs de dentistas a través de citas de la clínica
+          const appointments = await this.prisma.appointment.findMany({
+            where: { clinicId: input.clinic_id },
+            select: { dentistId: true },
+            distinct: ['dentistId'],
+          });
+
+          const dentistIds = appointments.map(a => a.dentistId);
+          if (!dentistIds.length) {
+            console.log(`✅ [Claude] Sin dentistas registrados en la clínica`);
+            return 'No hay dentistas disponibles en esta clínica.';
+          }
+
+          const dentists = await this.prisma.user.findMany({
+            where: { id: { in: dentistIds } },
+            include: { dentistProfile: true },
+          });
+
+          // Filtrar por especialidad en la aplicación si es necesario
+          let filtered = dentists;
+          if (input.specialty) {
+            filtered = dentists.filter((d: any) =>
+              d.dentistProfile?.specialization?.toLowerCase().includes(input.specialty.toLowerCase())
+            );
+          }
+
+          console.log(`✅ [Claude] Dentistas encontrados: ${filtered.length}`);
+          if (!filtered.length) return 'No hay dentistas disponibles para esa especialidad.';
+
+          const list = filtered
+            .map((d: any) => `• ${d.firstName} ${d.lastName} (${d.dentistProfile?.specialization || 'Sin especialidad'}) — ID: ${d.id}`)
+            .join('\n');
+          return `Dentistas disponibles:\n${list}\n\nEscribe el nombre del dentista de tu preferencia.`;
+        } catch (err: any) {
+          console.error(`❌ [Claude] Error en get_dentists:`, err.message);
+          return `Error buscando dentistas: ${err.message}`;
+        }
       }
 
       case 'get_available_slots': {
