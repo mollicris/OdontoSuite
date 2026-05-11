@@ -36,13 +36,22 @@ export class WhatsAppController {
   @Post('webhook')
   @HttpCode(200)
   async receiveMessage(@Body() body: any): Promise<string> {
-    console.log('📨 [WhatsApp] Webhook recibido:', JSON.stringify(body).substring(0, 500));
-
     setImmediate(async () => {
       try {
-        if (!body?.object || body.object !== 'whatsapp_business_account') {
-          console.log('⚠️ [WhatsApp] Webhook recibido pero no es de WhatsApp');
-          return;
+        if (body?.object === 'whatsapp_business_account' && body?.entry?.[0]?.changes?.[0]?.value?.messages) {
+          const message = body.entry[0].changes[0].value.messages[0];
+          const senderPhone: string = message.from;
+          const messageText: string = message.text?.body ?? '';
+          const whatsappMsgId: string = message.id;
+
+          if (!messageText) return;
+
+          await this.processMessageUseCase.execute({
+            senderPhone,
+            messageText,
+            whatsappMsgId,
+            clinicId: this.defaultClinicId,
+          });
         }
 
         const entry = body?.entry?.[0];
