@@ -232,6 +232,7 @@ model Appointment {
   startTime       DateTime
   endTime         DateTime
   status          String   @default("SCHEDULED") // SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED
+  channel         String   @default("FRONTEND")  // FRONTEND, WHATSAPP, MOBILE, etc.
   notes           String?
   cancelReason    String?
   createdAt       DateTime @default(now())
@@ -244,6 +245,7 @@ model Appointment {
   @@index([dentistId])
   @@index([serviceId])
   @@index([startTime])
+  @@index([channel])
   @@map("appointments")
 }
 

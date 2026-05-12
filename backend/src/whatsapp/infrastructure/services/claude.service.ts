@@ -259,6 +259,7 @@ Responde en español, máximo 3 líneas.`;
           startTime,
           endTime,
           status: 'SCHEDULED',
+          channel: 'WHATSAPP',
           notes: `${input.notes ?? ''} [Google Event: ${googleEventId}]`.trim(),
         } as any);
 
