@@ -176,6 +176,10 @@ Responde en español, máximo 3 líneas.`;
   }
 
   private async executeTool(name: string, input: Record<string, any>, clinicId: string): Promise<string> {
+    console.log(`🔧 [Claude] executeTool called with name: "${name}"`);
+    console.log(`🔧 [Claude] Input keys: ${Object.keys(input).join(', ')}`);
+    console.log(`🔧 [Claude] Full input:`, JSON.stringify(input, null, 2));
+
     switch (name) {
       case 'get_dentists': {
         console.log(`🔍 [Claude] Buscando dentistas para clínica ${input.clinic_id}${input.specialty ? ` especialidad: ${input.specialty}` : ''}`);
@@ -227,8 +231,19 @@ Responde en español, máximo 3 líneas.`;
       }
 
       case 'book_appointment': {
+        console.log('📅 [WHATSAPP] Iniciando book_appointment:', {
+          phone: input.patient_phone,
+          specialty: input.specialty,
+          date: input.date,
+          dentist_id: input.dentist_id,
+          service_id: input.service_id,
+        });
+
         let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
+        console.log('👤 [WHATSAPP] Paciente búsqueda:', { found: !!patient, patientId: patient?.id });
+
         if (!patient) {
+          console.log('👤 [WHATSAPP] Creando nuevo paciente:', { phone: input.patient_phone, name: input.patient_name });
           const [firstName, ...rest] = (input.patient_name as string).split(' ');
           patient = await this.patientRepository.create({
             clinicId,
@@ -236,22 +251,35 @@ Responde en español, máximo 3 líneas.`;
             lastName: rest.join(' ') || 'N/A',
             phone: input.patient_phone,
             email: input.patient_email,
-            dateOfBirth: new Date('1990-01-01'), // Default date
-            gender: 'O', // Other
+            dateOfBirth: new Date('1990-01-01'),
+            gender: 'O',
           } as any);
+          console.log('✅ [WHATSAPP] Paciente creado:', { patientId: patient.id });
         }
 
+        console.log('📅 [WHATSAPP] Creando evento de Google Calendar');
         const googleEventId = await this.calendarService.createAppointmentEvent({
           patientName: input.patient_name,
           specialty: input.specialty,
           date: input.date,
           time: input.time,
         });
+        console.log('✅ [WHATSAPP] Google Calendar creado:', { eventId: googleEventId });
 
         const startTime = new Date(`${input.date}T${input.time}:00`);
         const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
 
-        await this.appointmentRepository.create({
+        console.log('💾 [WHATSAPP] Guardando cita en BD:', {
+          clinicId,
+          patientId: patient.id,
+          dentistId: input.dentist_id,
+          serviceId: input.service_id,
+          startTime,
+          endTime,
+          channel: 'WHATSAPP',
+        });
+
+        const appointment = await this.appointmentRepository.create({
           clinicId,
           patientId: patient.id,
           dentistId: input.dentist_id,
@@ -262,6 +290,8 @@ Responde en español, máximo 3 líneas.`;
           channel: 'WHATSAPP',
           notes: `${input.notes ?? ''} [Google Event: ${googleEventId}]`.trim(),
         } as any);
+
+        console.log('✅ [WHATSAPP] Cita guardada exitosamente:', { appointmentId: appointment.id });
 
         return `Cita agendada ✅\n- ${input.specialty}\n- ${input.date} a las ${input.time}`;
       }
@@ -282,6 +312,7 @@ Responde en español, máximo 3 líneas.`;
       }
 
       default:
+        console.log(`❌ [Claude] Tool name "${name}" did not match any case in executeTool switch`);
         return 'Herramienta no reconocida.';
     }
   }
