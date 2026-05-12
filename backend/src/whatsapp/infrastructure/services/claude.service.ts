@@ -100,62 +100,63 @@ export class ClaudeService implements IClaudeService {
     patientPhone: string;
     clinicId: string;
   }): Promise<ClaudeToolResult> {
-    console.log(`🤖 [Claude] Iniciando chat para ${params.patientPhone} en clínica ${params.clinicId}`);
-    console.log(`📝 [Claude] Mensajes en historial: ${params.messages.length}`);
 
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const systemPrompt = `SISTEMA DE AGENDACIÓN AUTOMÁTICO.
+    const systemPrompt = `Eres un sistema de citas.
 Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
 
-TAREAS:
-A) AGENDAR CITA:
-   1. Si ves: nombre + especialidad + fecha + email en mensaje → EJECUTA get_dentists(clinic_id="${params.clinicId}", specialty=lo que dijo)
-   2. Después muestra dentistas. Si paciente confirma dentista → EJECUTA get_available_slots(date=la fecha confirmada, dentist_id=id del dentista, specialty=especialidad)
-   3. Muestra horarios. Si paciente confirma hora → EJECUTA book_appointment(patient_name, patient_phone="${params.patientPhone}", patient_email, specialty, dentist_id, service_id, date, time=hora confirmada, clinic_id="${params.clinicId}")
+FLUJO:
+1. AGENDAR: Si paciente da NOMBRE + ESPECIALIDAD + FECHA + EMAIL
+   → Ejecuta get_dentists
+   → Después get_available_slots
+   → Finalmente book_appointment
+   → Responde: "Cita agendada" (SIN llamar herramientas de nuevo)
 
-B) CONSULTAR CITAS: get_patient_appointments(patient_phone="${params.patientPhone}", clinic_id="${params.clinicId}")
+2. CONSULTAR CITAS: Si paciente pregunta "mis citas" o "próximas citas"
+   → Ejecuta get_patient_appointments UNA SOLA VEZ
+   → Responde mostrando citas (SIN llamar herramientas de nuevo)
 
-C) CANCELAR: cancel_appointment(patient_phone="${params.patientPhone}")
+3. CANCELAR: Si paciente dice "cancelar cita"
+   → Ejecuta cancel_appointment
+   → Responde: "Cita cancelada" (SIN llamar herramientas de nuevo)
 
-INSTRUCCIONES CRÍTICAS:
-- SIEMPRE ejecuta herramientas. NO conversación.
-- nombre + especialidad + fecha + email → EJECUTA get_dentists INMEDIATAMENTE
-- "Hoy"=${today}, "Mañana"=${tomorrow}
-- Máximo 2 líneas respuesta
-- Español`;
+IMPORTANTE: Después de ejecutar una herramienta, SIEMPRE responde con texto. NO llames la misma herramienta dos veces.
+
+"Hoy"=${today}, "Mañana"=${tomorrow}
+Responde en español, máximo 2 líneas.`;
 
     let messages = params.messages as Anthropic.MessageParam[];
+
+    // Limitar historial a últimos 10 mensajes para evitar rate limit
+    if (messages.length > 10) {
+      messages = messages.slice(-10);
+      console.log(`🔄 [Claude] Historial limitado a últimos 10 mensajes (tenía ${params.messages.length})`);
+    }
+
     console.log(`🔄 [Claude] Llamando a API con ${messages.length} mensajes`);
 
     let response = await this.anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1024,
+      max_tokens: 512,
       system: systemPrompt,
       tools: TOOLS,
-      tool_choice: { type: 'any' } as any,
       messages,
     });
 
-    console.log(`💬 [Claude] Respuesta recibida. Stop reason: ${response.stop_reason}`);
-
     let loopCount = 0;
-    while (response.stop_reason === 'tool_use' && loopCount < 10) {
+    while (response.stop_reason === 'tool_use' && loopCount < 5) {
       loopCount++;
-      console.log(`🔧 [Claude] Iteración ${loopCount}: Procesando herramientas`);
       const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-      console.log(`🔨 [Claude] Herramientas a ejecutar: ${toolUses.map(t => t.name).join(', ')}`);
 
       const toolResults = await Promise.all(
         toolUses.map(async tool => {
           try {
-            console.log(`⚙️ [Claude] Ejecutando herramienta: ${tool.name}`);
             const content = await this.executeTool(tool.name, tool.input as Record<string, any>, params.clinicId);
-            console.log(`✅ [Claude] Herramienta ${tool.name} ejecutada exitosamente`);
             return { type: 'tool_result' as const, tool_use_id: tool.id, content };
           } catch (err: any) {
-            console.error(`❌ [Claude] Error en herramienta ${tool.name}:`, err.message);
+            console.error(`❌ Error en ${tool.name}:`, err.message);
             return { type: 'tool_result' as const, tool_use_id: tool.id, content: `Error: ${err.message}`, is_error: true };
           }
         }),
@@ -169,42 +170,33 @@ INSTRUCCIONES CRÍTICAS:
 
       response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: 512,
         system: systemPrompt,
         tools: TOOLS,
-        tool_choice: { type: 'any' } as any,
         messages,
       });
     }
 
-    const text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? '';
-    console.log(`📤 [Claude] Respuesta final: "${text.substring(0, 100)}..."`);
+    let text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? '';
+
+    if (!text || text.trim() === '') {
+      text = '¿En qué más puedo ayudarte?';
+    }
+
     return { reply: text };
   }
 
   private async executeTool(name: string, input: Record<string, any>, clinicId: string): Promise<string> {
-    console.log(`🔧 [Claude] executeTool called with name: "${name}"`);
-    console.log(`🔧 [Claude] Input keys: ${Object.keys(input).join(', ')}`);
-    console.log(`🔧 [Claude] Full input:`, JSON.stringify(input, null, 2));
-
     switch (name) {
       case 'get_dentists': {
-        console.log(`🔍 [Claude] Buscando dentistas para clínica ${input.clinic_id}${input.specialty ? ` especialidad: ${input.specialty}` : ''}`);
         try {
-          // Obtener dentistas directamente a través de la relación DentistClinic
           const dentistClinics = await (this.prisma as any).dentistClinic.findMany({
             where: { clinicId: input.clinic_id, isActive: true },
-            include: {
-              dentist: { include: { dentistProfile: true } },
-            },
+            include: { dentist: { include: { dentistProfile: true } } },
           });
 
-          if (!dentistClinics.length) {
-            console.log(`✅ [Claude] Sin dentistas registrados en la clínica`);
-            return 'No hay dentistas disponibles en esta clínica.';
-          }
+          if (!dentistClinics.length) return 'No hay dentistas disponibles en esta clínica.';
 
-          // Filtrar por especialidad si es necesario
           let filtered = dentistClinics;
           if (input.specialty) {
             filtered = dentistClinics.filter((dc: any) =>
@@ -212,16 +204,14 @@ INSTRUCCIONES CRÍTICAS:
             );
           }
 
-          console.log(`✅ [Claude] Dentistas encontrados: ${filtered.length}`);
           if (!filtered.length) return 'No hay dentistas disponibles para esa especialidad.';
 
           const list = filtered
-            .map((dc: any) => `• ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'Sin especialidad'}) — ID: ${dc.dentist.id}`)
+            .map((dc: any) => `• ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'N/A'}) — ID: ${dc.dentist.id}`)
             .join('\n');
-          return `Dentistas disponibles:\n${list}\n\nEscribe el nombre del dentista de tu preferencia.`;
+          return `Dentistas disponibles:\n${list}`;
         } catch (err: any) {
-          console.error(`❌ [Claude] Error en get_dentists:`, err.message);
-          return `Error buscando dentistas: ${err.message}`;
+          return `Error: ${err.message}`;
         }
       }
 
@@ -238,19 +228,9 @@ INSTRUCCIONES CRÍTICAS:
       }
 
       case 'book_appointment': {
-        console.log('📅 [WHATSAPP] Iniciando book_appointment:', {
-          phone: input.patient_phone,
-          specialty: input.specialty,
-          date: input.date,
-          dentist_id: input.dentist_id,
-          service_id: input.service_id,
-        });
-
         let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
-        console.log('👤 [WHATSAPP] Paciente búsqueda:', { found: !!patient, patientId: patient?.id });
 
         if (!patient) {
-          console.log('👤 [WHATSAPP] Creando nuevo paciente:', { phone: input.patient_phone, name: input.patient_name });
           const [firstName, ...rest] = (input.patient_name as string).split(' ');
           patient = await this.patientRepository.create({
             clinicId,
@@ -261,30 +241,17 @@ INSTRUCCIONES CRÍTICAS:
             dateOfBirth: new Date('1990-01-01'),
             gender: 'O',
           } as any);
-          console.log('✅ [WHATSAPP] Paciente creado:', { patientId: patient.id });
         }
 
-        console.log('📅 [WHATSAPP] Creando evento de Google Calendar');
         const googleEventId = await this.calendarService.createAppointmentEvent({
           patientName: input.patient_name,
           specialty: input.specialty,
           date: input.date,
           time: input.time,
         });
-        console.log('✅ [WHATSAPP] Google Calendar creado:', { eventId: googleEventId });
 
         const startTime = new Date(`${input.date}T${input.time}:00`);
         const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-
-        console.log('💾 [WHATSAPP] Guardando cita en BD:', {
-          clinicId,
-          patientId: patient.id,
-          dentistId: input.dentist_id,
-          serviceId: input.service_id,
-          startTime,
-          endTime,
-          channel: 'WHATSAPP',
-        });
 
         const appointment = await this.appointmentRepository.create({
           clinicId,
@@ -298,9 +265,8 @@ INSTRUCCIONES CRÍTICAS:
           notes: `${input.notes ?? ''} [Google Event: ${googleEventId}]`.trim(),
         } as any);
 
-        console.log('✅ [WHATSAPP] Cita guardada exitosamente:', { appointmentId: appointment.id });
-
-        return `Cita agendada ✅\n- ${input.specialty}\n- ${input.date} a las ${input.time}`;
+        console.log(`✅ [WHATSAPP] Cita agendada: ${appointment.id}`);
+        return `Cita agendada ✅\n${input.date} a las ${input.time}`;
       }
 
       case 'cancel_appointment': {
@@ -319,7 +285,6 @@ INSTRUCCIONES CRÍTICAS:
       }
 
       default:
-        console.log(`❌ [Claude] Tool name "${name}" did not match any case in executeTool switch`);
         return 'Herramienta no reconocida.';
     }
   }
