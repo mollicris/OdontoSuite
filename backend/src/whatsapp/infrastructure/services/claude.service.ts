@@ -84,7 +84,6 @@ const MAX_HISTORY_MESSAGES = 30;
 const MAX_TOOL_ITERATIONS = 8;
 const MAX_FORCE_ATTEMPTS = 2;
 const MODEL = 'claude-haiku-4-5-20251001';
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TIME_PATTERN = /\b\d{1,2}[:.h]\d{2}\b|\ba\s+las?\s+\d{1,2}/i;
 
 @Injectable()
@@ -368,10 +367,6 @@ REGLAS CRÍTICAS:
   }
 
   private async handleGetAvailableSlots(input: Record<string, any>, clinicId: string): Promise<string> {
-    if (!UUID_REGEX.test(input.dentist_id)) {
-      return `Error: dentist_id "${input.dentist_id}" no es UUID. Ejecuta get_dentists y luego vuelve a llamar esta herramienta con el UUID correcto.`;
-    }
-
     const slots = await this.availabilityService.getAvailableSlots(clinicId, input.date, input.dentist_id, 30);
     if (!slots.length) return 'No hay horarios disponibles para esa fecha.';
     return `Horarios disponibles el ${input.date}: ${slots.slice(0, 8).join(', ')}`;
@@ -380,9 +375,16 @@ REGLAS CRÍTICAS:
   private async handleBookAppointment(input: Record<string, any>, clinicId: string): Promise<string> {
     console.log(`📅 [BookAppointment] Iniciando para ${input.patient_name} - ${input.date} ${input.time}`);
 
-    if (!UUID_REGEX.test(input.dentist_id)) {
-      console.error(`❌ [BookAppointment] dentist_id inválido: "${input.dentist_id}"`);
-      return `Error: dentist_id "${input.dentist_id}" no es UUID. Ejecuta get_dentists para obtener UUIDs, identifica al dentista que el paciente eligió (${input.patient_name}), y vuelve a llamar book_appointment CON el UUID correcto. NO esperes confirmación del paciente, agenda inmediatamente porque ya tienes todos los datos.`;
+    const dentistId = await this.resolveDentistId(input.dentist_id, input.specialty, clinicId);
+    if (!dentistId) {
+      const dentists = await this.getDentistsBySpecialty(clinicId, input.specialty);
+      if (dentists.length === 0) {
+        return `Error: No hay dentistas para "${input.specialty}" en esta clínica.`;
+      }
+      const options = dentists
+        .map((d: any, idx: number) => `${idx + 1}) ${d.firstName} ${d.lastName} (dentist_id=${d.id})`)
+        .join('\n');
+      return `Error: dentist_id "${input.dentist_id}" no es válido. Hay ${dentists.length} dentistas disponibles para "${input.specialty}":\n${options}\nVuelve a llamar book_appointment con un dentist_id de la lista (formato UUID).`;
     }
 
     try {
@@ -402,7 +404,7 @@ REGLAS CRÍTICAS:
       const appointment = await this.appointmentRepository.create({
         clinicId,
         patientId: patient.id,
-        dentistId: input.dentist_id,
+        dentistId,
         serviceId,
         startTime,
         endTime,
@@ -425,6 +427,34 @@ REGLAS CRÍTICAS:
       });
       throw err;
     }
+  }
+
+  private async resolveDentistId(rawId: string, specialty: string, clinicId: string): Promise<string | null> {
+    const exists = await (this.prisma as any).user.findUnique({ where: { id: rawId } });
+    if (exists) return rawId;
+
+    console.log(`🔍 [BookAppointment] dentist_id "${rawId}" no existe, intentando resolver por especialidad...`);
+    const dentists = await this.getDentistsBySpecialty(clinicId, specialty);
+
+    if (dentists.length === 1) {
+      console.log(`✅ [BookAppointment] Único dentista para "${specialty}": ${dentists[0].id}`);
+      return dentists[0].id;
+    }
+
+    return null;
+  }
+
+  private async getDentistsBySpecialty(clinicId: string, specialty: string): Promise<any[]> {
+    const dentistClinics = await (this.prisma as any).dentistClinic.findMany({
+      where: { clinicId, isActive: true },
+      include: { dentist: { include: { dentistProfile: true } } },
+    });
+
+    return dentistClinics
+      .filter((dc: any) =>
+        dc.dentist.dentistProfile?.specialization?.toLowerCase().includes(specialty.toLowerCase()),
+      )
+      .map((dc: any) => dc.dentist);
   }
 
   private async resolveServiceId(clinicId: string, specialty: string): Promise<string | undefined> {
