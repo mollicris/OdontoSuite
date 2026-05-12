@@ -83,6 +83,7 @@ const TOOLS: Anthropic.Tool[] = [
 const MAX_HISTORY_MESSAGES = 30;
 const MAX_TOOL_ITERATIONS = 6;
 const MODEL = 'claude-haiku-4-5-20251001';
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class ClaudeService implements IClaudeService {
@@ -247,14 +248,18 @@ REGLAS CRÍTICAS:
     const list = filtered
       .map(
         (dc: any, idx: number) =>
-          `${idx + 1}. ID:${dc.dentist.id} - ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'N/A'})`,
+          `Opción ${idx + 1}: ${dc.dentist.firstName} ${dc.dentist.lastName} - ${dc.dentist.dentistProfile?.specialization || 'N/A'}\n   dentist_id=${dc.dentist.id}`,
       )
-      .join('\n');
+      .join('\n\n');
 
-    return `Dentistas disponibles:\n${list}`;
+    return `Dentistas disponibles:\n\n${list}\n\nIMPORTANTE: Cuando el paciente elija un dentista, usa el valor exacto de "dentist_id=" en las próximas herramientas.`;
   }
 
   private async handleGetAvailableSlots(input: Record<string, any>, clinicId: string): Promise<string> {
+    if (!UUID_REGEX.test(input.dentist_id)) {
+      return `Error: dentist_id "${input.dentist_id}" no es un UUID válido. Debes usar el valor exacto de "dentist_id=" de la respuesta anterior de get_dentists. Ejecuta get_dentists nuevamente si lo necesitas.`;
+    }
+
     const slots = await this.availabilityService.getAvailableSlots(clinicId, input.date, input.dentist_id, 30);
     if (!slots.length) return 'No hay horarios disponibles para esa fecha.';
     return `Horarios disponibles el ${input.date}: ${slots.slice(0, 8).join(', ')}`;
@@ -262,6 +267,11 @@ REGLAS CRÍTICAS:
 
   private async handleBookAppointment(input: Record<string, any>, clinicId: string): Promise<string> {
     console.log(`📅 [BookAppointment] Iniciando para ${input.patient_name} - ${input.date} ${input.time}`);
+
+    if (!UUID_REGEX.test(input.dentist_id)) {
+      console.error(`❌ [BookAppointment] dentist_id inválido: "${input.dentist_id}"`);
+      return `Error: dentist_id "${input.dentist_id}" no es un UUID válido. Debes usar el valor exacto de "dentist_id=" de la respuesta de get_dentists, no el nombre del dentista. Ejecuta get_dentists nuevamente para obtener los UUIDs correctos.`;
+    }
 
     try {
       const serviceId = await this.resolveServiceId(clinicId, input.specialty);
