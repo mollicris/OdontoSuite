@@ -81,9 +81,11 @@ const TOOLS: Anthropic.Tool[] = [
 ];
 
 const MAX_HISTORY_MESSAGES = 30;
-const MAX_TOOL_ITERATIONS = 6;
+const MAX_TOOL_ITERATIONS = 8;
+const MAX_FORCE_ATTEMPTS = 2;
 const MODEL = 'claude-haiku-4-5-20251001';
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TIME_PATTERN = /\b\d{1,2}[:.h]\d{2}\b|\ba\s+las?\s+\d{1,2}/i;
 
 @Injectable()
 export class ClaudeService implements IClaudeService {
@@ -113,15 +115,54 @@ export class ClaudeService implements IClaudeService {
 
     console.log(`🤖 [Claude] Procesando: ${messages.length} mensajes en historial`);
 
+    const lastUserMessage = this.getLastUserMessage(messages);
+    const userConfirmedTime = TIME_PATTERN.test(lastUserMessage);
+    if (userConfirmedTime) {
+      console.log(`⏰ [Claude] Paciente confirmó una hora: "${lastUserMessage}"`);
+    }
+
+    const state = { bookingCompleted: false };
+
     let response = await this.callClaude(systemPrompt, messages);
     this.logResponse(response);
 
-    let iteration = 0;
     let currentMessages = messages as Anthropic.MessageParam[];
+
+    // Loop principal de tool execution
+    const loopResult = await this.runToolLoop(systemPrompt, currentMessages, response, params.clinicId, state);
+    currentMessages = loopResult.messages;
+    response = loopResult.finalResponse;
+
+    // Si el paciente confirmó hora pero no se agendó, forzar book_appointment
+    if (userConfirmedTime && !state.bookingCompleted) {
+      console.log(`🚨 [Claude] Paciente confirmó hora pero NO se agendó. Forzando book_appointment...`);
+      const forced = await this.forceBookAppointment(systemPrompt, currentMessages, params.clinicId, state);
+      currentMessages = forced.messages;
+      response = forced.finalResponse;
+    }
+
+    if (userConfirmedTime && !state.bookingCompleted) {
+      console.error(`❌ [Claude] FALLO: No se pudo agendar después de ${MAX_FORCE_ATTEMPTS} intentos forzados`);
+    }
+
+    return { reply: this.extractReply(response) };
+  }
+
+  private async runToolLoop(
+    systemPrompt: string,
+    initialMessages: Anthropic.MessageParam[],
+    initialResponse: Anthropic.Message,
+    clinicId: string,
+    state: { bookingCompleted: boolean },
+  ): Promise<{ messages: Anthropic.MessageParam[]; finalResponse: Anthropic.Message }> {
+    let response = initialResponse;
+    let currentMessages = initialMessages;
+    let iteration = 0;
 
     while (response.stop_reason === 'tool_use' && iteration < MAX_TOOL_ITERATIONS) {
       iteration++;
-      const toolResults = await this.executeToolCalls(response, params.clinicId);
+      const { toolResults, bookingDone } = await this.executeToolCalls(response, clinicId);
+      if (bookingDone) state.bookingCompleted = true;
 
       currentMessages = [
         ...currentMessages,
@@ -133,7 +174,68 @@ export class ClaudeService implements IClaudeService {
       this.logResponse(response, iteration);
     }
 
-    return { reply: this.extractReply(response) };
+    return { messages: currentMessages, finalResponse: response };
+  }
+
+  private async forceBookAppointment(
+    systemPrompt: string,
+    currentMessages: Anthropic.MessageParam[],
+    clinicId: string,
+    state: { bookingCompleted: boolean },
+  ): Promise<{ messages: Anthropic.MessageParam[]; finalResponse: Anthropic.Message }> {
+    let lastResponse: Anthropic.Message | null = null;
+
+    for (let attempt = 1; attempt <= MAX_FORCE_ATTEMPTS; attempt++) {
+      console.log(`🔨 [Claude] Intento forzado ${attempt}/${MAX_FORCE_ATTEMPTS}`);
+
+      const forcedMessages: Anthropic.MessageParam[] = [
+        ...currentMessages,
+        {
+          role: 'user',
+          content:
+            'INSTRUCCIÓN DEL SISTEMA: El paciente ya confirmó la hora. Ejecuta book_appointment INMEDIATAMENTE con todos los datos del historial. Si necesitas el UUID del dentista, llama primero a get_dentists. No respondas con texto, solo ejecuta herramientas.',
+        },
+      ];
+
+      const response = await this.anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools: TOOLS,
+        tool_choice: { type: 'any' } as any,
+        messages: forcedMessages,
+      });
+
+      this.logResponse(response, 1000 + attempt);
+
+      const { toolResults, bookingDone } = await this.executeToolCalls(response, clinicId);
+      if (bookingDone) state.bookingCompleted = true;
+
+      currentMessages = [
+        ...forcedMessages,
+        { role: 'assistant', content: response.content },
+        { role: 'user', content: toolResults },
+      ];
+
+      // Después de ejecutar herramientas, dejar que Claude genere respuesta final
+      const finalResponse = await this.callClaude(systemPrompt, currentMessages);
+      lastResponse = finalResponse;
+      this.logResponse(finalResponse, 2000 + attempt);
+
+      if (state.bookingCompleted) {
+        console.log(`✅ [Claude] book_appointment ejecutado exitosamente en intento ${attempt}`);
+        return { messages: currentMessages, finalResponse };
+      }
+    }
+
+    return { messages: currentMessages, finalResponse: lastResponse! };
+  }
+
+  private getLastUserMessage(messages: { role: string; content: string }[]): string {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i].content;
+    }
+    return '';
   }
 
   private buildSystemPrompt(phone: string, clinicId: string, today: string, tomorrow: string): string {
@@ -152,7 +254,8 @@ FLUJO DE AGENDACIÓN (3 PASOS):
 
 REGLAS CRÍTICAS:
 - Cuando el paciente diga una HORA (ej: "14:00", "a las 10"), DEBES llamar book_appointment INMEDIATAMENTE.
-- Para get_available_slots y book_appointment, dentist_id DEBE ser el UUID que viene en la respuesta de get_dentists (formato: "ID:uuid-aqui").
+- Para get_available_slots y book_appointment, dentist_id DEBE ser el UUID exacto de get_dentists (formato "dentist_id=<uuid>").
+- Si una herramienta retorna error, CORRIGE el error y vuelve a llamarla en el MISMO turno. NO pidas confirmación al paciente.
 - Si "hoy" → ${today}. Si "mañana" → ${tomorrow}.
 - Responde en español, máximo 2 líneas.
 - NO respondas con texto cuando deberías ejecutar una herramienta.`;
@@ -186,13 +289,20 @@ REGLAS CRÍTICAS:
     });
   }
 
-  private async executeToolCalls(response: Anthropic.Message, clinicId: string) {
+  private async executeToolCalls(
+    response: Anthropic.Message,
+    clinicId: string,
+  ): Promise<{ toolResults: any[]; bookingDone: boolean }> {
     const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+    let bookingDone = false;
 
-    return Promise.all(
+    const toolResults = await Promise.all(
       toolUses.map(async tool => {
         try {
           const content = await this.executeTool(tool.name, tool.input as Record<string, any>, clinicId);
+          if (tool.name === 'book_appointment' && content.startsWith('✅')) {
+            bookingDone = true;
+          }
           return { type: 'tool_result' as const, tool_use_id: tool.id, content };
         } catch (err: any) {
           console.error(`❌ [Tool ${tool.name}] Error:`, err.message);
@@ -205,6 +315,8 @@ REGLAS CRÍTICAS:
         }
       }),
     );
+
+    return { toolResults, bookingDone };
   }
 
   private extractReply(response: Anthropic.Message): string {
@@ -257,7 +369,7 @@ REGLAS CRÍTICAS:
 
   private async handleGetAvailableSlots(input: Record<string, any>, clinicId: string): Promise<string> {
     if (!UUID_REGEX.test(input.dentist_id)) {
-      return `Error: dentist_id "${input.dentist_id}" no es un UUID válido. Debes usar el valor exacto de "dentist_id=" de la respuesta anterior de get_dentists. Ejecuta get_dentists nuevamente si lo necesitas.`;
+      return `Error: dentist_id "${input.dentist_id}" no es UUID. Ejecuta get_dentists y luego vuelve a llamar esta herramienta con el UUID correcto.`;
     }
 
     const slots = await this.availabilityService.getAvailableSlots(clinicId, input.date, input.dentist_id, 30);
@@ -270,7 +382,7 @@ REGLAS CRÍTICAS:
 
     if (!UUID_REGEX.test(input.dentist_id)) {
       console.error(`❌ [BookAppointment] dentist_id inválido: "${input.dentist_id}"`);
-      return `Error: dentist_id "${input.dentist_id}" no es un UUID válido. Debes usar el valor exacto de "dentist_id=" de la respuesta de get_dentists, no el nombre del dentista. Ejecuta get_dentists nuevamente para obtener los UUIDs correctos.`;
+      return `Error: dentist_id "${input.dentist_id}" no es UUID. Ejecuta get_dentists para obtener UUIDs, identifica al dentista que el paciente eligió (${input.patient_name}), y vuelve a llamar book_appointment CON el UUID correcto. NO esperes confirmación del paciente, agenda inmediatamente porque ya tienes todos los datos.`;
     }
 
     try {
