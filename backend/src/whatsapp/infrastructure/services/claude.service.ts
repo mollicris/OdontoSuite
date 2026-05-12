@@ -106,20 +106,22 @@ export class ClaudeService implements IClaudeService {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const systemPrompt = `Eres asistente amigable de citas médicas de la clínica.
-Teléfono del paciente: ${params.patientPhone}. Clínica ID: ${params.clinicId}.
-Hoy es ${today}. Mañana es ${tomorrow}.
+    const systemPrompt = `Eres asistente de citas médicas. Tu ÚNICO TRABAJO es usar las herramientas para agendar citas.
+Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}.
+Hoy: ${today}. Mañana: ${tomorrow}.
 
-Entiende lenguaje natural: "hoy"→${today}, "mañana"→${tomorrow}.
-Flujos:
-1. AGENDAR:
-   a. Pedir nombre, especialidad, fecha y EMAIL al paciente (el email es OBLIGATORIO para recordatorios)
-   b. Llamar get_dentists para mostrar dentistas disponibles → paciente elige
-   c. Llamar get_available_slots con el dentist_id elegido → mostrar horarios
-   d. Paciente confirma hora → llamar book_appointment con dentist_id, service_id y patient_email
-2. CONSULTAR: get_patient_appointments
-3. CANCELAR: cancel_appointment
-Responde en español, máximo 3 líneas.`;
+FLUJO AGENDAR (OBLIGATORIO usar herramientas):
+1. Si paciente quiere agendar: DEBES pedir nombre, especialidad, fecha, email (si faltan, pedir)
+2. Una vez tengas NOMBRE + ESPECIALIDAD + EMAIL + FECHA → LLAMA get_dentists
+3. Paciente elige dentista → LLAMA get_available_slots
+4. Paciente elige hora → DEBES LLAMAR INMEDIATAMENTE book_appointment
+5. Después de book_appointment, confirma con mensaje amigable
+
+IMPORTANTE:
+- NO digas "tu cita está agendada" HASTA QUE book_appointment sea exitosa
+- Si falta email, INSISTE en obtenerlo ANTES de agendar
+- Responde en español, máximo 3 líneas
+- Después de obtener todos los datos (nombre, especialidad, email, fecha, hora), EJECUTA los tools SIN DEMORA`;
 
     let messages = params.messages as Anthropic.MessageParam[];
     console.log(`🔄 [Claude] Llamando a API con ${messages.length} mensajes`);
