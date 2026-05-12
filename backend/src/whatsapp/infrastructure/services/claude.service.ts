@@ -51,7 +51,7 @@ const TOOLS: Anthropic.Tool[] = [
         clinic_id: { type: 'string' },
         notes: { type: 'string' },
       },
-      required: ['patient_name', 'patient_phone', 'patient_email', 'specialty', 'dentist_id', 'service_id', 'date', 'time', 'clinic_id'],
+      required: ['patient_name', 'patient_phone', 'patient_email', 'specialty', 'dentist_id', 'date', 'time', 'clinic_id'],
     },
   },
   {
@@ -106,29 +106,31 @@ export class ClaudeService implements IClaudeService {
 
     const systemPrompt = `Eres un SISTEMA DE AGENDACIÓN. Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
 
-FLUJO:
+FLUJO AGENDAR CITA:
 1. Si paciente da: NOMBRE + EMAIL + ESPECIALIDAD + FECHA
-   → Ejecuta get_dentists
-   → Respuesta tiene formato: "1. ID:uuid-here Nombre (Especialidad)"
-   → EXTRAE el UUID que está después de "ID:"
+   → Ejecuta: get_dentists(clinic_id="${params.clinicId}", specialty=ESPECIALIDAD)
+   → Respuesta: "1. ID:uuid-here Nombre (Especialidad)"
+   → EXTRAE el UUID después de "ID:"
 
-2. Cuando paciente elige dentista (por número 1, 2, 3 o nombre):
-   → Ejecuta get_available_slots(dentist_id=EL_UUID_QUE_EXTRAJISTE)
-   → Muestra horarios disponibles
+2. Cuando paciente elige dentista (número 1, 2, etc):
+   → Ejecuta: get_available_slots(date=FECHA, dentist_id=EL_UUID, specialty=ESPECIALIDAD)
+   → Muestra horarios
 
-3. Cuando paciente confirma HORA (10:30, 10:00, etc):
-   → Ejecuta book_appointment(dentist_id=EL_UUID_QUE_EXTRAJISTE)
+3. Cuando paciente dice la HORA (10:30, 10:00, etc):
+   → Ejecuta: book_appointment(patient_name=NOMBRE, patient_phone="${params.patientPhone}", patient_email=EMAIL, specialty=ESPECIALIDAD, dentist_id=EL_UUID, date=FECHA, time=HORA, clinic_id="${params.clinicId}")
+   → El sistema busca service_id automáticamente
    → Responde: "Cita agendada"
 
-OTROS CASOS:
-- CONSULTAR: Si pregunta "mis citas" → get_patient_appointments (UNA VEZ)
-- CANCELAR: Si dice "cancelar" → cancel_appointment (UNA VEZ)
+OTROS:
+- CONSULTAR CITAS: Si pregunta "mis citas" → get_patient_appointments(patient_phone="${params.patientPhone}", clinic_id="${params.clinicId}")
+- CANCELAR CITA: Si dice "cancelar" → cancel_appointment(patient_phone="${params.patientPhone}")
 
-IMPORTANTE:
-- EXTRAE el UUID del formato "ID:uuid-aqui" de get_dentists
-- USA ese UUID en get_available_slots y book_appointment
+CRÍTICO:
+- EXTRAE UUID del formato "ID:uuid-aqui"
+- USA ese UUID en get_available_slots Y book_appointment
 - NO ejecutes la misma herramienta dos veces
-- Responde máximo 2 líneas en español
+- Cuando paciente confirma hora → EJECUTA book_appointment INMEDIATAMENTE
+- Máximo 2 líneas en español
 - "Hoy"=${today}, "Mañana"=${tomorrow}`;
 
     let messages = params.messages as Anthropic.MessageParam[];
@@ -231,6 +233,18 @@ IMPORTANTE:
       }
 
       case 'book_appointment': {
+        // Buscar service_id por especialidad si no se proporciona
+        let serviceId = input.service_id;
+        if (!serviceId) {
+          const service = await (this.prisma as any).service.findFirst({
+            where: {
+              clinicId,
+              name: { contains: input.specialty, mode: 'insensitive' },
+            },
+          });
+          if (service) serviceId = service.id;
+        }
+
         let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
 
         if (!patient) {
@@ -260,7 +274,7 @@ IMPORTANTE:
           clinicId,
           patientId: patient.id,
           dentistId: input.dentist_id,
-          serviceId: input.service_id,
+          serviceId,
           startTime,
           endTime,
           status: 'SCHEDULED',
