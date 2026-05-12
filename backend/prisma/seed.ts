@@ -5,16 +5,21 @@ const prisma = new PrismaClient({ log: ['error'] });
 
 async function main() {
   console.log('🌱 Starting database seed...');
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  // Clean up existing test users
-  await prisma.user.deleteMany({
-    where: {
-      email: {
-        in: ['admin@odontosuites.com', 'secretaria@odontosuites.com', 'paciente@odontosuites.com'],
+  // Only clean up test users in development
+  if (!isProduction) {
+    await prisma.user.deleteMany({
+      where: {
+        email: {
+          in: ['admin@odontosuites.com', 'secretaria@odontosuites.com', 'paciente@odontosuites.com'],
+        },
       },
-    },
-  });
-  console.log('✅ Cleaned up existing test users');
+    });
+    console.log('✅ Cleaned up existing test users');
+  } else {
+    console.log('⏭️  Skipping user cleanup in production');
+  }
 
   // Generate password hash for test users
   const passwordHash = await bcrypt.hash('secret', 10);
@@ -80,10 +85,10 @@ async function main() {
   // Create test clinic with specific ID for appointments demo
   const clinic = await prisma.clinic.upsert({
     where: { id: 'f48805c5-e12b-4774-9465-6b29c880d005' },
-    update: {},
+    update: { name: 'Test dental clinic' }, // Update name if exists
     create: {
       id: 'f48805c5-e12b-4774-9465-6b29c880d005',
-      name: 'Clínica Dental OdontoSuite',
+      name: 'Test dental clinic',
       email: 'info@odontosuites.com',
       phone: '+591 2-3456789',
       address: 'Calle Principal 123',
@@ -329,29 +334,10 @@ async function main() {
       },
     });
   }
-  console.log(`✅ Schedule created (Mon-Sat: 08:00-18:00)`);
+  console.log(`✅ Schedule created (Mon-Sat: 08:00-18:00}`);
 
-  // Create sample treatment (only if dentists exist)
-  if (dentists.length > 0) {
-    const treatment = await prisma.treatment.upsert({
-      where: { id: 'treatment-sample-001' },
-      update: {},
-      create: {
-        id: 'treatment-sample-001',
-        patientId: patient.id,
-        serviceId: service.id,
-        diagnosis: 'Caries profunda en pieza 16',
-        treatment: 'Obturación con resina compuesta',
-        notes: 'Paciente con antecedente de hipersensibilidad',
-        observations: 'Proceder con cuidado, usar desensibilizante',
-        cost: 150,
-        performedBy: dentists[0].id,
-        scheduledDate: new Date('2026-04-20T10:00:00'),
-        status: 'PENDING',
-      },
-    });
-    console.log(`✅ Sample treatment created: ${treatment.id}`);
-  }
+  // Note: Treatment sample creation is skipped to avoid migration issues
+  // Can be created manually via API after deployment
 
   console.log('\n🎉 Database seeded successfully!');
   console.log('\n📋 Test credentials (password: secret):');

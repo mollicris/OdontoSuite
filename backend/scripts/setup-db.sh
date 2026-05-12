@@ -3,7 +3,13 @@
 echo "🔄 Running database migrations..."
 npx prisma migrate deploy
 
-echo "🌱 Seeding database..."
-npm run seed
+# Only seed in development or first deploy
+if [ "$NODE_ENV" != "production" ] || [ ! -f ".seeded" ]; then
+  echo "🌱 Seeding database..."
+  npm run seed
+  touch .seeded
+else
+  echo "⏭️  Skipping seed in production"
+fi
 
 echo "✅ Database setup complete!"

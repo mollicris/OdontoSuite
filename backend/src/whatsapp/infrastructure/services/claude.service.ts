@@ -236,6 +236,8 @@ Responde en español, máximo 3 líneas.`;
             lastName: rest.join(' ') || 'N/A',
             phone: input.patient_phone,
             email: input.patient_email,
+            dateOfBirth: new Date('1990-01-01'), // Default date
+            gender: 'O', // Other
           } as any);
         }
 
