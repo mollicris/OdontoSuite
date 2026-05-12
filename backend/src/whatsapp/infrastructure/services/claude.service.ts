@@ -104,28 +104,27 @@ export class ClaudeService implements IClaudeService {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const systemPrompt = `Eres un sistema de citas.
-Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
+    const systemPrompt = `Eres un sistema de citas. Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
 
-FLUJO:
-1. AGENDAR: Si paciente da NOMBRE + ESPECIALIDAD + FECHA + EMAIL
-   → Ejecuta get_dentists
-   → Después get_available_slots
-   → Finalmente book_appointment
+FLUJO AGENDAR:
+1. Si paciente da: NOMBRE + ESPECIALIDAD + FECHA + EMAIL
+   → Ejecuta: get_dentists(clinic_id="${params.clinicId}", specialty=especialidad)
+2. get_dentists retorna lista con formato: "1. Nombre (Especialidad) [UUID]"
+   → EXTRAE el UUID entre corchetes [...]
+   → Cuando paciente elige dentista por número o nombre:
+   → Ejecuta: get_available_slots(date, dentist_id=EL_UUID_QUE_EXTRAJISTE, specialty)
+3. Después que paciente confirma hora:
+   → Ejecuta: book_appointment(patient_name, patient_phone="${params.patientPhone}", patient_email, specialty, dentist_id=EL_UUID, service_id, date, time, clinic_id="${params.clinicId}")
    → Responde: "Cita agendada" (SIN llamar herramientas de nuevo)
 
-2. CONSULTAR CITAS: Si paciente pregunta "mis citas" o "próximas citas"
-   → Ejecuta get_patient_appointments UNA SOLA VEZ
-   → Responde mostrando citas (SIN llamar herramientas de nuevo)
+FLUJOS OTROS:
+- CONSULTAR: Si pregunta "mis citas" → get_patient_appointments (UNA SOLA VEZ)
+- CANCELAR: Si dice "cancelar" → cancel_appointment (UNA SOLA VEZ)
 
-3. CANCELAR: Si paciente dice "cancelar cita"
-   → Ejecuta cancel_appointment
-   → Responde: "Cita cancelada" (SIN llamar herramientas de nuevo)
-
-IMPORTANTE: Después de ejecutar una herramienta, SIEMPRE responde con texto. NO llames la misma herramienta dos veces.
+CRÍTICO: EXTRAE dentist_id de la respuesta de get_dentists usando el UUID entre [...]. NO inventes IDs.
 
 "Hoy"=${today}, "Mañana"=${tomorrow}
-Responde en español, máximo 2 líneas.`;
+Responde máximo 2 líneas en español.`;
 
     let messages = params.messages as Anthropic.MessageParam[];
 
@@ -207,9 +206,9 @@ Responde en español, máximo 2 líneas.`;
           if (!filtered.length) return 'No hay dentistas disponibles para esa especialidad.';
 
           const list = filtered
-            .map((dc: any) => `• ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'N/A'}) — ID: ${dc.dentist.id}`)
+            .map((dc: any, idx: number) => `${idx + 1}. ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'N/A'}) [${dc.dentist.id}]`)
             .join('\n');
-          return `Dentistas disponibles:\n${list}`;
+          return `Dentistas:\n${list}\n\nEscribe el número (1, 2, 3...) del dentista que deseas.`;
         } catch (err: any) {
           return `Error: ${err.message}`;
         }
