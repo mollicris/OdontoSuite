@@ -58,8 +58,8 @@ export class WhatsAppController {
         const messages = value?.messages;
 
         if (!messages || messages.length === 0) {
-          console.log('ℹ️ [WhatsApp] Webhook recibido pero no contiene mensajes (puede ser estatus)');
-          console.log('📋 [WhatsApp] Contenido del webhook:', JSON.stringify(value).substring(0, 300));
+          // console.log('ℹ️ [WhatsApp] Webhook recibido pero no contiene mensajes (puede ser estatus)');
+          // console.log('📋 [WhatsApp] Contenido del webhook:', JSON.stringify(value).substring(0, 300));
           return;
         }
 
