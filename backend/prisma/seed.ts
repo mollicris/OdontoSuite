@@ -96,36 +96,113 @@ async function main() {
   });
   console.log(`✅ Clinic created: ${clinic.id}`);
 
-  // Create test dentist user with specific ID for appointments demo
-  const dentist = await prisma.user.upsert({
-    where: { id: '64b97af4-bdfa-49d4-8a41-f0b7e5e127cc' },
-    update: {},
-    create: {
+  // Create multiple dentists with different specializations
+  const dentistsData = [
+    {
       id: '64b97af4-bdfa-49d4-8a41-f0b7e5e127cc',
       email: 'doctor.garcia@odontosuites.com',
-      password: passwordHash,
       firstName: 'David',
       lastName: 'García',
       phone: '+591 76123456',
-      roleId: dentistRole.id,
-    },
-  });
-  console.log(`✅ Dentist user created: ${dentist.id}`);
-
-  // Create dentist profile
-  await prisma.dentistProfile.upsert({
-    where: { userId: dentist.id },
-    update: {},
-    create: {
-      userId: dentist.id,
-      licenseName: 'License',
       licenseNumber: 'LIC12345',
-      licenseExpiry: new Date('2030-12-31'),
-      specialization: 'General',
+      specialization: 'Odontología General',
       yearsOfExperience: 5,
     },
-  });
-  console.log(`✅ Dentist profile created`);
+    {
+      id: 'dentist-002',
+      email: 'dra.maria@odontosuites.com',
+      firstName: 'María',
+      lastName: 'López',
+      phone: '+591 76234567',
+      licenseNumber: 'LIC12346',
+      specialization: 'Limpieza Dental',
+      yearsOfExperience: 3,
+    },
+    {
+      id: 'dentist-003',
+      email: 'dr.carlos@odontosuites.com',
+      firstName: 'Carlos',
+      lastName: 'Rodríguez',
+      phone: '+591 76345678',
+      licenseNumber: 'LIC12347',
+      specialization: 'Ortodoncia',
+      yearsOfExperience: 8,
+    },
+    {
+      id: 'dentist-004',
+      email: 'dra.ana@odontosuites.com',
+      firstName: 'Ana',
+      lastName: 'Martínez',
+      phone: '+591 76456789',
+      licenseNumber: 'LIC12348',
+      specialization: 'Endodoncia',
+      yearsOfExperience: 6,
+    },
+    {
+      id: 'dentist-005',
+      email: 'dr.pedro@odontosuites.com',
+      firstName: 'Pedro',
+      lastName: 'Sánchez',
+      phone: '+591 76567890',
+      licenseNumber: 'LIC12349',
+      specialization: 'Implantología',
+      yearsOfExperience: 10,
+    },
+  ];
+
+  const dentists = [];
+
+  for (const data of dentistsData) {
+    const dentist = await prisma.user.upsert({
+      where: { id: data.id },
+      update: {},
+      create: {
+        id: data.id,
+        email: data.email,
+        password: passwordHash,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        roleId: dentistRole.id,
+      },
+    });
+
+    // Create dentist profile
+    await prisma.dentistProfile.upsert({
+      where: { userId: dentist.id },
+      update: {},
+      create: {
+        userId: dentist.id,
+        licenseName: `Licencia ${data.firstName}`,
+        licenseNumber: data.licenseNumber,
+        licenseExpiry: new Date('2030-12-31'),
+        specialization: data.specialization,
+        yearsOfExperience: data.yearsOfExperience,
+        isAvailable: true,
+      },
+    });
+
+    // Link dentist to clinic
+    await prisma.dentistClinic.upsert({
+      where: {
+        dentistId_clinicId: {
+          dentistId: dentist.id,
+          clinicId: clinic.id,
+        },
+      },
+      update: { isActive: true },
+      create: {
+        dentistId: dentist.id,
+        clinicId: clinic.id,
+        isActive: true,
+      },
+    });
+
+    dentists.push(dentist);
+    console.log(`✅ ${data.firstName} ${data.lastName} (${data.specialization})`);
+  }
+
+  console.log(`✅ ${dentists.length} dentists created and linked to clinic`);
 
   // Create test patient with specific ID for appointments demo
   const patient = await prisma.patient.upsert({
@@ -267,7 +344,7 @@ async function main() {
       notes: 'Paciente con antecedente de hipersensibilidad',
       observations: 'Proceder con cuidado, usar desensibilizante',
       cost: 150,
-      performedBy: dentist.id,
+      performedBy: dentists[0].id,
       scheduledDate: new Date('2026-04-20T10:00:00'),
       status: 'PENDING',
     },
@@ -282,7 +359,7 @@ async function main() {
   console.log(`  👤 Patient: paciente@odontosuites.com`);
   console.log('\nTest IDs (for appointments):');
   console.log(`  Clinic: ${clinic.id}`);
-  console.log(`  Dentist: ${dentist.id}`);
+  console.log(`  Dentist: ${dentists[0].id}`);
   console.log(`  Patient: ${patient.id}`);
   console.log(`  Service (Cleaning): ${service.id}`);
 }
