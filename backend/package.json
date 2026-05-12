@@ -20,10 +20,10 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed": "TS_NODE_PROJECT=tsconfig.prisma.json ts-node prisma/seed.ts"
+    "seed": "npx ts-node prisma/seed.ts"
   },
   "prisma": {
-    "seed": "TS_NODE_PROJECT=tsconfig.prisma.json ts-node prisma/seed.ts"
+    "seed": "npx ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
