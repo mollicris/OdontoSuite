@@ -1,4 +1,5 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { LoggerService } from '@common/services/logger.service';
 import {
   INotificationChannel,
   ReminderNotificationPayload,
@@ -11,11 +12,11 @@ import {
 @Injectable()
 export class WhatsAppNotificationChannel implements INotificationChannel {
   readonly channelName = 'whatsapp';
-  private readonly logger = new Logger(WhatsAppNotificationChannel.name);
 
   constructor(
     @Inject(WHATSAPP_API_SERVICE)
     private readonly whatsapp: IWhatsAppApiService,
+    private readonly logger: LoggerService,
   ) {}
 
   async send(payload: ReminderNotificationPayload): Promise<void> {
@@ -35,14 +36,23 @@ export class WhatsAppNotificationChannel implements INotificationChannel {
         ? `Hola ${payload.patientName}, le recordamos su cita de *${payload.serviceName}* mañana ${dateStr} a las *${timeStr}* con ${payload.dentistName}. Por favor confirme o llame si necesita reagendar.`
         : `Recordatorio: su cita de *${payload.serviceName}* es HOY a las *${timeStr}* con ${payload.dentistName}. Le esperamos en ${payload.clinicName}.`;
 
-    const msgId = await this.whatsapp.sendMessage(payload.patientPhone, message);
+    try {
+      const msgId = await this.whatsapp.sendMessage(payload.patientPhone, message);
 
-    if (!msgId) {
-      throw new Error(`WhatsApp API retornó null para ${payload.patientPhone}`);
+      if (!msgId) {
+        throw new Error(`WhatsApp API retornó null para ${payload.patientPhone}`);
+      }
+
+      this.logger.logNotificationSent('WHATSAPP', payload.patientPhone, 'REMINDER', {
+        appointmentId: payload.appointmentId,
+        msgId,
+        hoursUntil: payload.hoursUntil,
+      });
+    } catch (error: any) {
+      this.logger.logNotificationError('WHATSAPP', payload.patientPhone, error, {
+        appointmentId: payload.appointmentId,
+      });
+      throw error;
     }
-
-    this.logger.log(
-      `[WhatsApp] Recordatorio enviado a ${payload.patientPhone}, msgId=${msgId}`,
-    );
   }
 }

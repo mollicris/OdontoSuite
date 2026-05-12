@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@common/services/prisma.service';
+import { LoggerService } from '@common/services/logger.service';
 import {
   AppointmentEntity,
   AppointmentStatus,
@@ -7,7 +8,10 @@ import {
 
 @Injectable()
 export class AppointmentRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly logger: LoggerService,
+  ) {}
 
   private mapPrismaToEntity(
     data: any,
@@ -22,12 +26,15 @@ export class AppointmentRepository {
   async create(
     appointment: AppointmentEntity,
   ): Promise<AppointmentEntity & { patient: any; dentist: any; service: any }> {
-    console.log('💾 AppointmentRepository.create - Input:', {
+    const startTime = Date.now();
+    const channel = (appointment as any).channel || 'FRONTEND';
+
+    this.logger.logDatabaseOperation('CREATE', 'Appointment', {
       clinicId: appointment.clinicId,
       patientId: appointment.patientId,
       dentistId: appointment.dentistId,
       serviceId: appointment.serviceId,
-      status: appointment.status,
+      channel,
     });
 
     try {
@@ -61,6 +68,7 @@ export class AppointmentRepository {
           startTime: appointment.startTime,
           endTime: appointment.endTime,
           status: appointment.status,
+          channel,
           notes: appointment.notes,
         },
         include: {
@@ -70,10 +78,20 @@ export class AppointmentRepository {
         },
       });
 
-      console.log('✅ AppointmentRepository.create - Success:', created.id);
+      const duration = Date.now() - startTime;
+      this.logger.logAppointmentCreated(created.id, channel, created.patientId, {
+        duration,
+        startTime: created.startTime,
+      });
+
       return new AppointmentEntity(this.mapPrismaToEntity(created)) as any;
     } catch (error: any) {
-      console.error('❌ AppointmentRepository.create - Error:', error?.message);
+      const duration = Date.now() - startTime;
+      this.logger.logAppointmentError('CREATE', error, undefined, {
+        duration,
+        channel,
+        patientId: appointment.patientId,
+      });
       throw error;
     }
   }

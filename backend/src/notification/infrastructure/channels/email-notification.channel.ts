@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { LoggerService } from '@common/services/logger.service';
 import {
   INotificationChannel,
   ReminderNotificationPayload,
@@ -9,10 +10,12 @@ import {
 @Injectable()
 export class EmailNotificationChannel implements INotificationChannel {
   readonly channelName = 'email';
-  private readonly logger = new Logger(EmailNotificationChannel.name);
   private readonly transporter: nodemailer.Transporter;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly logger: LoggerService,
+  ) {
     const smtpUser = this.config.get<string>('SMTP_USER');
     const smtpPass = this.config.get<string>('SMTP_PASS');
 
@@ -56,13 +59,24 @@ export class EmailNotificationChannel implements INotificationChannel {
       <p>Si necesita cancelar o reagendar, contáctenos.</p>
     `;
 
-    await this.transporter.sendMail({
-      from: this.config.get<string>('SMTP_FROM', 'noreply@odontosuite.com'),
-      to: payload.patientEmail,
-      subject,
-      html,
-    });
+    try {
+      await this.transporter.sendMail({
+        from: this.config.get<string>('SMTP_FROM', 'noreply@odontosuite.com'),
+        to: payload.patientEmail,
+        subject,
+        html,
+      });
 
-    this.logger.log(`[Email] Recordatorio enviado a ${payload.patientEmail}`);
+      this.logger.logNotificationSent('EMAIL', payload.patientEmail, 'REMINDER', {
+        appointmentId: payload.appointmentId,
+        hoursUntil: payload.hoursUntil,
+      });
+    } catch (error: any) {
+      this.logger.logNotificationError('EMAIL', payload.patientEmail, error, {
+        appointmentId: payload.appointmentId,
+        subject,
+      });
+      throw error;
+    }
   }
 }
