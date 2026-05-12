@@ -32,7 +32,9 @@
       "@treatment/*": ["src/treatment/*"],
       "@billing/*": ["src/billing/*"],
       "@clinic/*": ["src/clinic/*"],
-      "@reporting/*": ["src/reporting/*"]
+      "@reporting/*": ["src/reporting/*"],
+      "@whatsapp/*": ["src/whatsapp/*"],
+      "@notification/*": ["src/notification/*"]
     }
   },
   "include": ["src/**/*"],

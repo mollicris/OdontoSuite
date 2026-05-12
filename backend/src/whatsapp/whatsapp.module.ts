@@ -29,5 +29,6 @@ import { CALENDAR_SERVICE } from './infrastructure/interfaces/calendar-service.i
     ClaudeService,
     GoogleCalendarService,
   ],
+  exports: [WHATSAPP_API_SERVICE],
 })
 export class WhatsAppModule {}

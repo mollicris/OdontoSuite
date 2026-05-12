@@ -42,6 +42,7 @@ const TOOLS: Anthropic.Tool[] = [
       properties: {
         patient_name: { type: 'string' },
         patient_phone: { type: 'string' },
+        patient_email: { type: 'string', description: 'Email del paciente para recordatorios' },
         specialty: { type: 'string' },
         dentist_id: { type: 'string', description: 'ID del dentista elegido por el paciente' },
         service_id: { type: 'string', description: 'ID del servicio correspondiente a la especialidad' },
@@ -50,7 +51,7 @@ const TOOLS: Anthropic.Tool[] = [
         clinic_id: { type: 'string' },
         notes: { type: 'string' },
       },
-      required: ['patient_name', 'patient_phone', 'specialty', 'dentist_id', 'service_id', 'date', 'time', 'clinic_id'],
+      required: ['patient_name', 'patient_phone', 'patient_email', 'specialty', 'dentist_id', 'service_id', 'date', 'time', 'clinic_id'],
     },
   },
   {
@@ -112,10 +113,10 @@ Hoy es ${today}. Mañana es ${tomorrow}.
 Entiende lenguaje natural: "hoy"→${today}, "mañana"→${tomorrow}.
 Flujos:
 1. AGENDAR:
-   a. Pedir nombre, especialidad y fecha al paciente
+   a. Pedir nombre, especialidad, fecha y EMAIL al paciente (el email es OBLIGATORIO para recordatorios)
    b. Llamar get_dentists para mostrar dentistas disponibles → paciente elige
    c. Llamar get_available_slots con el dentist_id elegido → mostrar horarios
-   d. Paciente confirma hora → llamar book_appointment con dentist_id y service_id
+   d. Paciente confirma hora → llamar book_appointment con dentist_id, service_id y patient_email
 2. CONSULTAR: get_patient_appointments
 3. CANCELAR: cancel_appointment
 Responde en español, máximo 3 líneas.`;
@@ -179,29 +180,24 @@ Responde en español, máximo 3 líneas.`;
       case 'get_dentists': {
         console.log(`🔍 [Claude] Buscando dentistas para clínica ${input.clinic_id}${input.specialty ? ` especialidad: ${input.specialty}` : ''}`);
         try {
-          // Obtener IDs de dentistas a través de citas de la clínica
-          const appointments = await this.prisma.appointment.findMany({
-            where: { clinicId: input.clinic_id },
-            select: { dentistId: true },
-            distinct: ['dentistId'],
+          // Obtener dentistas directamente a través de la relación DentistClinic
+          const dentistClinics = await (this.prisma as any).dentistClinic.findMany({
+            where: { clinicId: input.clinic_id, isActive: true },
+            include: {
+              dentist: { include: { dentistProfile: true } },
+            },
           });
 
-          const dentistIds = appointments.map(a => a.dentistId);
-          if (!dentistIds.length) {
+          if (!dentistClinics.length) {
             console.log(`✅ [Claude] Sin dentistas registrados en la clínica`);
             return 'No hay dentistas disponibles en esta clínica.';
           }
 
-          const dentists = await this.prisma.user.findMany({
-            where: { id: { in: dentistIds } },
-            include: { dentistProfile: true },
-          });
-
-          // Filtrar por especialidad en la aplicación si es necesario
-          let filtered = dentists;
+          // Filtrar por especialidad si es necesario
+          let filtered = dentistClinics;
           if (input.specialty) {
-            filtered = dentists.filter((d: any) =>
-              d.dentistProfile?.specialization?.toLowerCase().includes(input.specialty.toLowerCase())
+            filtered = dentistClinics.filter((dc: any) =>
+              dc.dentist.dentistProfile?.specialization?.toLowerCase().includes(input.specialty.toLowerCase())
             );
           }
 
@@ -209,7 +205,7 @@ Responde en español, máximo 3 líneas.`;
           if (!filtered.length) return 'No hay dentistas disponibles para esa especialidad.';
 
           const list = filtered
-            .map((d: any) => `• ${d.firstName} ${d.lastName} (${d.dentistProfile?.specialization || 'Sin especialidad'}) — ID: ${d.id}`)
+            .map((dc: any) => `• ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'Sin especialidad'}) — ID: ${dc.dentist.id}`)
             .join('\n');
           return `Dentistas disponibles:\n${list}\n\nEscribe el nombre del dentista de tu preferencia.`;
         } catch (err: any) {
@@ -239,6 +235,7 @@ Responde en español, máximo 3 líneas.`;
             firstName,
             lastName: rest.join(' ') || 'N/A',
             phone: input.patient_phone,
+            email: input.patient_email,
           } as any);
         }
 

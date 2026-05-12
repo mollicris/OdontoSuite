@@ -11,6 +11,7 @@ import { ClinicModule } from './clinic/clinic.module';
 import { ServiceModule } from './service/service.module';
 import { ReportingModule } from './reporting/reporting.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { NotificationModule } from './notification/notification.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -35,6 +36,7 @@ import { HealthController } from './health.controller';
     ServiceModule,
     ReportingModule,
     WhatsAppModule,
+    NotificationModule,
   ],
   controllers: [HealthController],
 })
