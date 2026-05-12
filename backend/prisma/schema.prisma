@@ -46,6 +46,7 @@ model User {
   role   Role   @relation(fields: [roleId], references: [id])
 
   dentistProfile DentistProfile?
+  dentistClinics DentistClinic[] @relation("DentistToClinics")
   appointments   Appointment[]
   treatments     Treatment[]     // treatments performed by this dentist
   auditLogs      AuditLog[]
@@ -76,6 +77,22 @@ model DentistProfile {
 // CLINIC CONTEXT - Clinic Management, Services, Schedule
 // ============================================================================
 
+model DentistClinic {
+  id        String   @id @default(uuid())
+  dentistId String
+  dentist   User     @relation("DentistToClinics", fields: [dentistId], references: [id], onDelete: Cascade)
+  clinicId  String
+  clinic    Clinic   @relation("ClinicToDentists", fields: [clinicId], references: [id], onDelete: Cascade)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([dentistId, clinicId])
+  @@index([dentistId])
+  @@index([clinicId])
+  @@map("dentist_clinics")
+}
+
 model Clinic {
   id            String   @id @default(uuid())
   name          String
@@ -93,6 +110,7 @@ model Clinic {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  dentists              DentistClinic[] @relation("ClinicToDentists")
   services              Service[]
   schedules             Schedule[]
   patients              Patient[]
