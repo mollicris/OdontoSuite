@@ -11,64 +11,53 @@ import { PrismaService } from '@common/services/prisma.service';
 const TOOLS: Anthropic.Tool[] = [
   {
     name: 'get_dentists',
-    description: 'Lista los dentistas disponibles en la clínica, filtrados por especialidad si se especifica.',
+    description:
+      'Use esta herramienta cuando el paciente quiera AGENDAR una cita y haya proporcionado: nombre, email, especialidad y fecha. Esta herramienta lista los dentistas disponibles en la clínica filtrados por especialidad. La respuesta incluye el ID (UUID) de cada dentista que DEBE usar en las siguientes herramientas.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        clinic_id: { type: 'string' },
-        specialty: { type: 'string', description: 'Especialidad para filtrar (opcional)' },
+        clinic_id: { type: 'string', description: 'UUID de la clínica' },
+        specialty: { type: 'string', description: 'Especialidad mencionada por el paciente (ej: Limpieza, Ortodoncia)' },
       },
-      required: ['clinic_id'],
+      required: ['clinic_id', 'specialty'],
     },
   },
   {
     name: 'get_available_slots',
-    description: 'Obtiene horarios disponibles para una fecha y dentista específico.',
+    description:
+      'Use esta herramienta DESPUÉS de get_dentists, cuando el paciente haya elegido un dentista. Obtiene los horarios disponibles para esa fecha y dentista. El parámetro dentist_id DEBE ser el UUID del dentista (de la respuesta de get_dentists), NO el nombre.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        date: { type: 'string', description: 'YYYY-MM-DD' },
-        dentist_id: { type: 'string', description: 'ID del dentista seleccionado' },
-        specialty: { type: 'string' },
+        date: { type: 'string', description: 'Fecha en formato YYYY-MM-DD' },
+        dentist_id: { type: 'string', description: 'UUID del dentista obtenido de get_dentists' },
+        specialty: { type: 'string', description: 'Especialidad' },
       },
       required: ['date', 'dentist_id', 'specialty'],
     },
   },
   {
     name: 'book_appointment',
-    description: 'Agenda una cita médica con el dentista elegido.',
+    description:
+      'OBLIGATORIO: Use esta herramienta INMEDIATAMENTE cuando el paciente confirme una HORA específica (ej: "14:00", "10:30", "a las 9"). Esta es la herramienta FINAL del flujo de agendación que guarda la cita en la base de datos. NO responda con texto sin antes ejecutar esta herramienta cuando tenga la hora confirmada.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        patient_name: { type: 'string' },
-        patient_phone: { type: 'string' },
-        patient_email: { type: 'string', description: 'Email del paciente para recordatorios' },
-        specialty: { type: 'string' },
-        dentist_id: { type: 'string', description: 'ID del dentista elegido por el paciente' },
-        service_id: { type: 'string', description: 'ID del servicio correspondiente a la especialidad' },
-        date: { type: 'string', description: 'YYYY-MM-DD' },
-        time: { type: 'string', description: 'HH:MM' },
-        clinic_id: { type: 'string' },
-        notes: { type: 'string' },
+        patient_name: { type: 'string', description: 'Nombre del paciente' },
+        patient_phone: { type: 'string', description: 'Teléfono del paciente (ya tienes este dato)' },
+        patient_email: { type: 'string', description: 'Email del paciente' },
+        specialty: { type: 'string', description: 'Especialidad de la cita' },
+        dentist_id: { type: 'string', description: 'UUID del dentista (de get_dentists)' },
+        date: { type: 'string', description: 'Fecha YYYY-MM-DD' },
+        time: { type: 'string', description: 'Hora HH:MM' },
+        clinic_id: { type: 'string', description: 'UUID de la clínica' },
       },
       required: ['patient_name', 'patient_phone', 'patient_email', 'specialty', 'dentist_id', 'date', 'time', 'clinic_id'],
     },
   },
   {
-    name: 'cancel_appointment',
-    description: 'Cancela una cita existente.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        patient_phone: { type: 'string' },
-        appointment_id: { type: 'string' },
-      },
-      required: ['patient_phone'],
-    },
-  },
-  {
     name: 'get_patient_appointments',
-    description: 'Consulta las citas próximas de un paciente.',
+    description: 'Use cuando el paciente pregunte sobre sus citas existentes ("mis citas", "qué citas tengo").',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -78,7 +67,22 @@ const TOOLS: Anthropic.Tool[] = [
       required: ['patient_phone', 'clinic_id'],
     },
   },
+  {
+    name: 'cancel_appointment',
+    description: 'Use cuando el paciente quiera cancelar una cita existente.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        patient_phone: { type: 'string' },
+      },
+      required: ['patient_phone'],
+    },
+  },
 ];
+
+const MAX_HISTORY_MESSAGES = 30;
+const MAX_TOOL_ITERATIONS = 6;
+const MODEL = 'claude-haiku-4-5-20251001';
 
 @Injectable()
 export class ClaudeService implements IClaudeService {
@@ -100,247 +104,248 @@ export class ClaudeService implements IClaudeService {
     patientPhone: string;
     clinicId: string;
   }): Promise<ClaudeToolResult> {
-
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const systemPrompt = `SISTEMA DE AGENDACIÓN. NO ERES CHATBOT. Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
+    const systemPrompt = this.buildSystemPrompt(params.patientPhone, params.clinicId, today, tomorrow);
+    const messages = this.trimHistory(params.messages);
 
-REGLA ABSOLUTA: Si ves una HORA (formato XX:XX ej: 14:00, 10:30) → EJECUTA book_appointment YA.
+    console.log(`🤖 [Claude] Procesando: ${messages.length} mensajes en historial`);
 
-FLUJO:
-1. NOMBRE + EMAIL + ESPECIALIDAD + FECHA → Ejecuta get_dentists(clinic_id="${params.clinicId}", specialty)
-2. Paciente elige número → Ejecuta get_available_slots(date, dentist_id=UUID_DE_RESPUESTA_ANTERIOR, specialty)
-3. Paciente dice HORA → **EJECUTA INMEDIATAMENTE book_appointment(patient_name, patient_phone="${params.patientPhone}", patient_email, specialty, dentist_id=UUID, date, time, clinic_id="${params.clinicId}")**
+    let response = await this.callClaude(systemPrompt, messages);
+    this.logResponse(response);
 
-PARÁMETROS get_dentists:
-- clinic_id: "${params.clinicId}"
-- specialty: (la que el paciente mencionó)
+    let iteration = 0;
+    let currentMessages = messages as Anthropic.MessageParam[];
 
-PARÁMETROS get_available_slots:
-- date: (YYYY-MM-DD)
-- dentist_id: (extrae UUID del formato "ID:uuid-aqui" de respuesta anterior)
-- specialty: (la especialidad)
+    while (response.stop_reason === 'tool_use' && iteration < MAX_TOOL_ITERATIONS) {
+      iteration++;
+      const toolResults = await this.executeToolCalls(response, params.clinicId);
 
-PARÁMETROS book_appointment (EJECUTA CUANDO VES HORA XX:XX):
-- patient_name: (el nombre que dio)
-- patient_phone: "${params.patientPhone}"
-- patient_email: (el email que dio)
-- specialty: (la especialidad)
-- dentist_id: (UUID que extrajiste)
-- date: (YYYY-MM-DD)
-- time: (la hora que dijo, formato HH:MM)
-- clinic_id: "${params.clinicId}"
+      currentMessages = [
+        ...currentMessages,
+        { role: 'assistant', content: response.content },
+        { role: 'user', content: toolResults },
+      ];
 
-OTROS:
-- CONSULTAR: "mis citas" → get_patient_appointments(patient_phone="${params.patientPhone}", clinic_id="${params.clinicId}")
-- CANCELAR: "cancelar" → cancel_appointment(patient_phone="${params.patientPhone}")
-
-**NO CONVERSACIÓN. SOLO EJECUTA HERRAMIENTAS.**
-"Hoy"=${today}, "Mañana"=${tomorrow}`;
-
-    let messages = params.messages as Anthropic.MessageParam[];
-
-    // Limitar historial a últimos 20 mensajes para mantener contexto sin exceder rate limit
-    if (messages.length > 20) {
-      messages = messages.slice(-20);
-      console.log(`🔄 [Claude] Historial limitado a últimos 20 mensajes (tenía ${params.messages.length})`);
+      response = await this.callClaude(systemPrompt, currentMessages);
+      this.logResponse(response, iteration);
     }
 
-    console.log(`🔄 [Claude] Llamando a API con ${messages.length} mensajes`);
+    return { reply: this.extractReply(response) };
+  }
 
-    let response = await this.anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+  private buildSystemPrompt(phone: string, clinicId: string, today: string, tomorrow: string): string {
+    return `Eres un asistente de agendación de citas dentales.
+
+CONTEXTO:
+- Teléfono del paciente: ${phone}
+- Clínica: ${clinicId}
+- Fecha de hoy: ${today}
+- Mañana: ${tomorrow}
+
+FLUJO DE AGENDACIÓN (3 PASOS):
+1. Recolectar datos del paciente: nombre, email, especialidad, fecha
+2. Mostrar dentistas (get_dentists) → paciente elige uno
+3. Mostrar horarios (get_available_slots) → paciente elige hora → AGENDAR (book_appointment)
+
+REGLAS CRÍTICAS:
+- Cuando el paciente diga una HORA (ej: "14:00", "a las 10"), DEBES llamar book_appointment INMEDIATAMENTE.
+- Para get_available_slots y book_appointment, dentist_id DEBE ser el UUID que viene en la respuesta de get_dentists (formato: "ID:uuid-aqui").
+- Si "hoy" → ${today}. Si "mañana" → ${tomorrow}.
+- Responde en español, máximo 2 líneas.
+- NO respondas con texto cuando deberías ejecutar una herramienta.`;
+  }
+
+  private trimHistory(messages: { role: string; content: string }[]): { role: string; content: string }[] {
+    if (messages.length <= MAX_HISTORY_MESSAGES) return messages;
+    console.log(`✂️ [Claude] Recortando historial: ${messages.length} → ${MAX_HISTORY_MESSAGES}`);
+    return messages.slice(-MAX_HISTORY_MESSAGES);
+  }
+
+  private async callClaude(systemPrompt: string, messages: any): Promise<Anthropic.Message> {
+    return this.anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1024,
       system: systemPrompt,
       tools: TOOLS,
       messages,
     });
+  }
 
-    let loopCount = 0;
-    while (response.stop_reason === 'tool_use' && loopCount < 5) {
-      loopCount++;
-      const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+  private logResponse(response: Anthropic.Message, iteration = 0): void {
+    const prefix = iteration > 0 ? `🔁 [Claude iter ${iteration}]` : `📥 [Claude]`;
+    console.log(`${prefix} stop_reason: ${response.stop_reason}`);
+    response.content.forEach(block => {
+      if (block.type === 'tool_use') {
+        console.log(`${prefix} 🔧 Tool: ${block.name}, input:`, JSON.stringify(block.input));
+      } else if (block.type === 'text' && block.text) {
+        console.log(`${prefix} 💬 Text: ${block.text.substring(0, 150)}`);
+      }
+    });
+  }
 
-      const toolResults = await Promise.all(
-        toolUses.map(async tool => {
-          try {
-            const content = await this.executeTool(tool.name, tool.input as Record<string, any>, params.clinicId);
-            return { type: 'tool_result' as const, tool_use_id: tool.id, content };
-          } catch (err: any) {
-            console.error(`❌ Error en ${tool.name}:`, err.message);
-            return { type: 'tool_result' as const, tool_use_id: tool.id, content: `Error: ${err.message}`, is_error: true };
-          }
-        }),
-      );
+  private async executeToolCalls(response: Anthropic.Message, clinicId: string) {
+    const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
 
-      messages = [
-        ...messages,
-        { role: 'assistant' as const, content: response.content },
-        { role: 'user' as const, content: toolResults },
-      ];
+    return Promise.all(
+      toolUses.map(async tool => {
+        try {
+          const content = await this.executeTool(tool.name, tool.input as Record<string, any>, clinicId);
+          return { type: 'tool_result' as const, tool_use_id: tool.id, content };
+        } catch (err: any) {
+          console.error(`❌ [Tool ${tool.name}] Error:`, err.message);
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: tool.id,
+            content: `Error: ${err.message}`,
+            is_error: true,
+          };
+        }
+      }),
+    );
+  }
 
-      response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 512,
-        system: systemPrompt,
-        tools: TOOLS,
-        messages,
-      });
-    }
-
-    let text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text ?? '';
-
-    if (!text || text.trim() === '') {
-      text = '¿En qué más puedo ayudarte?';
-    }
-
-    return { reply: text };
+  private extractReply(response: Anthropic.Message): string {
+    const text = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')?.text;
+    return text && text.trim() ? text : '¿En qué más puedo ayudarte?';
   }
 
   private async executeTool(name: string, input: Record<string, any>, clinicId: string): Promise<string> {
     switch (name) {
-      case 'get_dentists': {
-        try {
-          const dentistClinics = await (this.prisma as any).dentistClinic.findMany({
-            where: { clinicId: input.clinic_id, isActive: true },
-            include: { dentist: { include: { dentistProfile: true } } },
-          });
-
-          if (!dentistClinics.length) return 'No hay dentistas disponibles en esta clínica.';
-
-          let filtered = dentistClinics;
-          if (input.specialty) {
-            filtered = dentistClinics.filter((dc: any) =>
-              dc.dentist.dentistProfile?.specialization?.toLowerCase().includes(input.specialty.toLowerCase())
-            );
-          }
-
-          if (!filtered.length) return 'No hay dentistas disponibles para esa especialidad.';
-
-          const list = filtered
-            .map((dc: any, idx: number) => `${idx + 1}. ID:${dc.dentist.id} ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'N/A'})`)
-            .join('\n');
-          return `Dentistas:\n${list}`;
-        } catch (err: any) {
-          return `Error: ${err.message}`;
-        }
-      }
-
-      case 'get_available_slots': {
-        const slots = await this.availabilityService.getAvailableSlots(
-          clinicId,
-          input.date,
-          input.dentist_id,
-          30,
-        );
-        if (!slots.length) return 'No hay horarios disponibles para esa fecha.';
-        return `Horarios disponibles: ${slots.slice(0, 6).join(', ')}`;
-      }
-
-      case 'book_appointment': {
-        try {
-          console.log(`📅 [WHATSAPP] Iniciando book_appointment`);
-          console.log(`📅 [WHATSAPP] Paciente: ${input.patient_name} (${input.patient_phone})`);
-          console.log(`📅 [WHATSAPP] Especialidad: ${input.specialty}, Fecha: ${input.date}, Hora: ${input.time}`);
-
-          // Buscar service_id por especialidad si no se proporciona
-          let serviceId = input.service_id;
-          if (!serviceId) {
-            const service = await (this.prisma as any).service.findFirst({
-              where: {
-                clinicId,
-                name: { contains: input.specialty, mode: 'insensitive' },
-              },
-            });
-            if (service) {
-              serviceId = service.id;
-              console.log(`✅ [WHATSAPP] Service encontrado: ${serviceId}`);
-            } else {
-              console.warn(`⚠️ [WHATSAPP] Service no encontrado para especialidad: ${input.specialty}`);
-            }
-          }
-
-          let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
-          console.log(`👤 [WHATSAPP] Paciente búsqueda: ${patient ? 'encontrado' : 'no encontrado'}`);
-
-          if (!patient) {
-            const [firstName, ...rest] = (input.patient_name as string).split(' ');
-            patient = await this.patientRepository.create({
-              clinicId,
-              firstName,
-              lastName: rest.join(' ') || 'N/A',
-              phone: input.patient_phone,
-              email: input.patient_email,
-              dateOfBirth: new Date('1990-01-01'),
-              gender: 'O',
-            } as any);
-            console.log(`✅ [WHATSAPP] Paciente creado: ${patient.id}`);
-          }
-
-          const googleEventId = await this.calendarService.createAppointmentEvent({
-            patientName: input.patient_name,
-            specialty: input.specialty,
-            date: input.date,
-            time: input.time,
-          });
-          console.log(`✅ [WHATSAPP] Google Calendar creado: ${googleEventId}`);
-
-          const startTime = new Date(`${input.date}T${input.time}:00`);
-          const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-
-          console.log(`💾 [WHATSAPP] Guardando cita en BD...`);
-          const appointment = await this.appointmentRepository.create({
-            clinicId,
-            patientId: patient.id,
-            dentistId: input.dentist_id,
-            serviceId,
-            startTime,
-            endTime,
-            status: 'SCHEDULED',
-            channel: 'WHATSAPP',
-            notes: `${input.notes ?? ''} [Google Event: ${googleEventId}]`.trim(),
-          } as any);
-
-          console.log(`✅ [WHATSAPP] ¡CITA AGENDADA EXITOSAMENTE!`);
-          console.log(`✅ [WHATSAPP] Appointment ID: ${appointment.id}`);
-          console.log(`✅ [WHATSAPP] Paciente: ${appointment.patient?.firstName} ${appointment.patient?.lastName}`);
-          console.log(`✅ [WHATSAPP] Fecha/Hora: ${startTime.toISOString()}`);
-
-          return `Cita agendada ✅\n${input.date} a las ${input.time}`;
-        } catch (err: any) {
-          console.error(`❌ [WHATSAPP] ERROR AL AGENDAR CITA`);
-          console.error(`❌ [WHATSAPP] Error: ${err.message}`);
-          console.error(`❌ [WHATSAPP] Stack: ${err.stack}`);
-          console.error(`❌ [WHATSAPP] Datos: `, {
-            patient_name: input.patient_name,
-            patient_phone: input.patient_phone,
-            specialty: input.specialty,
-            date: input.date,
-            time: input.time,
-            dentist_id: input.dentist_id,
-          });
-          return `Error al agendar: ${err.message}`;
-        }
-      }
-
-      case 'cancel_appointment': {
-        const appts = await this.appointmentRepository.findByPhone(input.patient_phone, clinicId);
-        if (!appts?.length) return 'No encontré citas activas para cancelar.';
-        const appt = appts[0];
-        await this.appointmentRepository.updateStatus(appt.id, 'CANCELLED' as any, 'Cancelado por WhatsApp');
-        return `Cita cancelada ✅\n- ${appt.startTime?.toISOString()?.split('T')[0]}`;
-      }
-
-      case 'get_patient_appointments': {
-        const appts = await this.appointmentRepository.findByPhone(input.patient_phone, clinicId);
-        if (!appts?.length) return 'No tienes citas próximas agendadas.';
-        const list = appts.map((a: any) => `• ${a.startTime?.toISOString()}`).join('\n');
-        return `Tus próximas citas:\n${list}`;
-      }
-
+      case 'get_dentists':
+        return this.handleGetDentists(input);
+      case 'get_available_slots':
+        return this.handleGetAvailableSlots(input, clinicId);
+      case 'book_appointment':
+        return this.handleBookAppointment(input, clinicId);
+      case 'get_patient_appointments':
+        return this.handleGetPatientAppointments(input, clinicId);
+      case 'cancel_appointment':
+        return this.handleCancelAppointment(input, clinicId);
       default:
         return 'Herramienta no reconocida.';
     }
+  }
+
+  private async handleGetDentists(input: Record<string, any>): Promise<string> {
+    const dentistClinics = await (this.prisma as any).dentistClinic.findMany({
+      where: { clinicId: input.clinic_id, isActive: true },
+      include: { dentist: { include: { dentistProfile: true } } },
+    });
+
+    if (!dentistClinics.length) return 'No hay dentistas disponibles en esta clínica.';
+
+    const filtered = input.specialty
+      ? dentistClinics.filter((dc: any) =>
+          dc.dentist.dentistProfile?.specialization?.toLowerCase().includes(input.specialty.toLowerCase()),
+        )
+      : dentistClinics;
+
+    if (!filtered.length) return `No hay dentistas para la especialidad "${input.specialty}".`;
+
+    const list = filtered
+      .map(
+        (dc: any, idx: number) =>
+          `${idx + 1}. ID:${dc.dentist.id} - ${dc.dentist.firstName} ${dc.dentist.lastName} (${dc.dentist.dentistProfile?.specialization || 'N/A'})`,
+      )
+      .join('\n');
+
+    return `Dentistas disponibles:\n${list}`;
+  }
+
+  private async handleGetAvailableSlots(input: Record<string, any>, clinicId: string): Promise<string> {
+    const slots = await this.availabilityService.getAvailableSlots(clinicId, input.date, input.dentist_id, 30);
+    if (!slots.length) return 'No hay horarios disponibles para esa fecha.';
+    return `Horarios disponibles el ${input.date}: ${slots.slice(0, 8).join(', ')}`;
+  }
+
+  private async handleBookAppointment(input: Record<string, any>, clinicId: string): Promise<string> {
+    console.log(`📅 [BookAppointment] Iniciando para ${input.patient_name} - ${input.date} ${input.time}`);
+
+    try {
+      const serviceId = await this.resolveServiceId(clinicId, input.specialty);
+      const patient = await this.resolvePatient(input, clinicId);
+
+      const googleEventId = await this.calendarService.createAppointmentEvent({
+        patientName: input.patient_name,
+        specialty: input.specialty,
+        date: input.date,
+        time: input.time,
+      });
+
+      const startTime = new Date(`${input.date}T${input.time}:00`);
+      const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+
+      const appointment = await this.appointmentRepository.create({
+        clinicId,
+        patientId: patient.id,
+        dentistId: input.dentist_id,
+        serviceId,
+        startTime,
+        endTime,
+        status: 'SCHEDULED',
+        channel: 'WHATSAPP',
+        notes: `[Google Event: ${googleEventId}]`,
+      } as any);
+
+      console.log(`✅ [BookAppointment] Cita creada: ${appointment.id} (${input.date} ${input.time})`);
+
+      return `✅ Cita agendada para ${input.date} a las ${input.time}`;
+    } catch (err: any) {
+      console.error(`❌ [BookAppointment] Error:`, err.message);
+      console.error(`❌ [BookAppointment] Datos:`, {
+        patient_name: input.patient_name,
+        specialty: input.specialty,
+        date: input.date,
+        time: input.time,
+        dentist_id: input.dentist_id,
+      });
+      throw err;
+    }
+  }
+
+  private async resolveServiceId(clinicId: string, specialty: string): Promise<string | undefined> {
+    const service = await (this.prisma as any).service.findFirst({
+      where: { clinicId, name: { contains: specialty, mode: 'insensitive' } },
+    });
+    if (!service) {
+      console.warn(`⚠️ [Service] No encontrado para "${specialty}"`);
+      return undefined;
+    }
+    return service.id;
+  }
+
+  private async resolvePatient(input: Record<string, any>, clinicId: string): Promise<{ id: string }> {
+    const existing = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
+    if (existing) return existing;
+
+    const [firstName, ...rest] = (input.patient_name as string).split(' ');
+    const created = await this.patientRepository.create({
+      clinicId,
+      firstName,
+      lastName: rest.join(' ') || 'N/A',
+      phone: input.patient_phone,
+      email: input.patient_email,
+      dateOfBirth: new Date('1990-01-01'),
+      gender: 'O',
+    } as any);
+    console.log(`👤 [Patient] Creado: ${created.id}`);
+    return created;
+  }
+
+  private async handleGetPatientAppointments(input: Record<string, any>, clinicId: string): Promise<string> {
+    const appts = await this.appointmentRepository.findByPhone(input.patient_phone, clinicId);
+    if (!appts?.length) return 'No tienes citas próximas agendadas.';
+    const list = appts.map((a: any) => `• ${a.startTime?.toISOString()}`).join('\n');
+    return `Tus próximas citas:\n${list}`;
+  }
+
+  private async handleCancelAppointment(input: Record<string, any>, clinicId: string): Promise<string> {
+    const appts = await this.appointmentRepository.findByPhone(input.patient_phone, clinicId);
+    if (!appts?.length) return 'No encontré citas activas para cancelar.';
+    const appt = appts[0];
+    await this.appointmentRepository.updateStatus(appt.id, 'CANCELLED' as any, 'Cancelado por WhatsApp');
+    return `✅ Cita cancelada del ${appt.startTime?.toISOString()?.split('T')[0]}`;
   }
 }
