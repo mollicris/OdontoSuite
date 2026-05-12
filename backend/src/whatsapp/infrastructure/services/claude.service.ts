@@ -106,36 +106,25 @@ export class ClaudeService implements IClaudeService {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const systemPrompt = `ERES UN SISTEMA AUTOMÁTICO DE CITAS. NO ERES UN CHATBOT CONVERSACIONAL.
+    const systemPrompt = `SISTEMA DE AGENDACIÓN AUTOMÁTICO.
+Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
 
-Datos del paciente: Teléfono ${params.patientPhone}. Clínica: ${params.clinicId}.
-Hoy: ${today}. Mañana: ${tomorrow}.
+TAREAS:
+A) AGENDAR CITA:
+   1. Si ves: nombre + especialidad + fecha + email en mensaje → EJECUTA get_dentists(clinic_id="${params.clinicId}", specialty=lo que dijo)
+   2. Después muestra dentistas. Si paciente confirma dentista → EJECUTA get_available_slots(date=la fecha confirmada, dentist_id=id del dentista, specialty=especialidad)
+   3. Muestra horarios. Si paciente confirma hora → EJECUTA book_appointment(patient_name, patient_phone="${params.patientPhone}", patient_email, specialty, dentist_id, service_id, date, time=hora confirmada, clinic_id="${params.clinicId}")
 
-TU ÚNICA FUNCIÓN: Agendar citas usando herramientas. Nada más.
+B) CONSULTAR CITAS: get_patient_appointments(patient_phone="${params.patientPhone}", clinic_id="${params.clinicId}")
 
-PASO 1 - RECOLECTAR DATOS (responde en máximo 2 líneas):
-Necesitas: nombre, especialidad, fecha, email
-- Si el paciente da nombre + especialidad + fecha + email EN UN MENSAJE → VE A PASO 2
-- Si faltan datos → PIDE SOLO LOS FALTANTES
-- Si el paciente da algo incompleto → Pide aclaración, NO AVANCES sin todos los datos
+C) CANCELAR: cancel_appointment(patient_phone="${params.patientPhone}")
 
-PASO 2 - EJECUTAR HERRAMIENTAS (SIN EXCEPCIÓN):
-Una vez tengas: nombre, especialidad, fecha, email EJECUTA EN ORDEN:
-a) get_dentists(clinic_id, specialty) → muestra disponibles
-b) Si paciente confirma dentista → get_available_slots(date, dentist_id, specialty)
-c) Si paciente confirma hora → book_appointment(todos_los_datos)
-
-NO DIGAS "cita agendada" HASTA QUE book_appointment sea exitosa.
-NO SALTEES PASOS.
-NO CONVERSACIÓN EXTRA.
-Responde siempre en español, máximo 3 líneas.
-
-EJEMPLO FLUJO:
-Paciente: "Cristian, Limpieza, Hoy, abd@gmail.com"
-Tú: Ejecuta get_dentists → muestra Dra. María López → paciente confirma
-Tú: Ejecuta get_available_slots → muestra horarios 10:00, 11:00
-Paciente: "10:00"
-Tú: Ejecuta book_appointment INMEDIATAMENTE → Confirma: "Listo Cristian, cita agendada 2026-05-12 10:00"`;
+INSTRUCCIONES CRÍTICAS:
+- SIEMPRE ejecuta herramientas. NO conversación.
+- nombre + especialidad + fecha + email → EJECUTA get_dentists INMEDIATAMENTE
+- "Hoy"=${today}, "Mañana"=${tomorrow}
+- Máximo 2 líneas respuesta
+- Español`;
 
     let messages = params.messages as Anthropic.MessageParam[];
     console.log(`🔄 [Claude] Llamando a API con ${messages.length} mensajes`);
@@ -145,6 +134,7 @@ Tú: Ejecuta book_appointment INMEDIATAMENTE → Confirma: "Listo Cristian, cita
       max_tokens: 1024,
       system: systemPrompt,
       tools: TOOLS,
+      tool_choice: { type: 'any' } as any,
       messages,
     });
 
@@ -182,6 +172,7 @@ Tú: Ejecuta book_appointment INMEDIATAMENTE → Confirma: "Listo Cristian, cita
         max_tokens: 1024,
         system: systemPrompt,
         tools: TOOLS,
+        tool_choice: { type: 'any' } as any,
         messages,
       });
     }
