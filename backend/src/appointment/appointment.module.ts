@@ -6,6 +6,8 @@ import { ListAppointmentsUseCase } from './application/use-cases/list-appointmen
 import { UpdateAppointmentUseCase } from './application/use-cases/update-appointment.use-case';
 import { CheckAppointmentAvailabilityUseCase } from './application/use-cases/check-availability.use-case';
 import { AppointmentRepository } from './infrastructure/repositories/appointment.repository';
+import { AvailabilityService } from './infrastructure/services/availability.service';
+import { AVAILABILITY_SERVICE } from './infrastructure/interfaces/availability-service.interface';
 
 @Module({
   imports: [CommonModule],
@@ -16,7 +18,9 @@ import { AppointmentRepository } from './infrastructure/repositories/appointment
     UpdateAppointmentUseCase,
     CheckAppointmentAvailabilityUseCase,
     AppointmentRepository,
+    { provide: AVAILABILITY_SERVICE, useClass: AvailabilityService },
+    AvailabilityService,
   ],
-  exports: [AppointmentRepository],
+  exports: [AppointmentRepository, AVAILABILITY_SERVICE, AvailabilityService],
 })
 export class AppointmentModule {}

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { IClaudeService, ClaudeToolResult } from '../interfaces/claude-service.interface';
 import { ICalendarService, CALENDAR_SERVICE } from '../interfaces/calendar-service.interface';
+import { IAvailabilityService, AVAILABILITY_SERVICE } from '@appointment/infrastructure/interfaces/availability-service.interface';
 import { AppointmentRepository } from '@appointment/infrastructure/repositories/appointment.repository';
 import { PatientRepository } from '@patient/infrastructure/repositories/patient.repository';
 import { PrismaService } from '@common/services/prisma.service';
@@ -85,6 +86,7 @@ export class ClaudeService implements IClaudeService {
   constructor(
     private readonly config: ConfigService,
     @Inject(CALENDAR_SERVICE) private readonly calendarService: ICalendarService,
+    @Inject(AVAILABILITY_SERVICE) private readonly availabilityService: IAvailabilityService,
     private readonly appointmentRepository: AppointmentRepository,
     private readonly patientRepository: PatientRepository,
     private readonly prisma: PrismaService,
@@ -217,13 +219,19 @@ Responde en español, máximo 3 líneas.`;
       }
 
       case 'get_available_slots': {
-        const slots = await this.calendarService.getAvailableSlots(input.date);
+        console.log(`📅 [Claude] Obteniendo slots disponibles para ${input.date} dentista ${input.dentist_id}`);
+        const slots = await this.availabilityService.getAvailableSlots(
+          clinicId,
+          input.date,
+          input.dentist_id,
+          30, // 30 minutos por defecto
+        );
         if (!slots.length) return 'No hay horarios disponibles para esa fecha.';
         return `Horarios disponibles el ${input.date} con ese dentista:\n${slots.slice(0, 6).join(', ')}`;
       }
 
       case 'book_appointment': {
-        let patient = await this.patientRepository.findByPhone(input.patient_phone);
+        let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
         if (!patient) {
           const [firstName, ...rest] = (input.patient_name as string).split(' ');
           patient = await this.patientRepository.create({

@@ -209,7 +209,17 @@ export class AppointmentRepository {
 
     if (!patient) return null;
 
-    return this.findByPatient(patient.id);
+    const appointments = await this.prisma.appointment.findMany({
+      where: { patientId: patient.id, clinicId },
+      include: {
+        patient: true,
+        dentist: true,
+        service: true,
+      },
+      orderBy: { startTime: 'desc' },
+    });
+
+    return appointments.map((a) => new AppointmentEntity(this.mapPrismaToEntity(a)) as any);
   }
 
   async updateStatus(
