@@ -104,41 +104,47 @@ export class ClaudeService implements IClaudeService {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
-    const systemPrompt = `Eres un SISTEMA DE AGENDACIÓN. Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
+    const systemPrompt = `SISTEMA DE AGENDACIÓN. NO ERES CHATBOT. Teléfono: ${params.patientPhone}. Clínica: ${params.clinicId}. Hoy: ${today}.
 
-FLUJO AGENDAR CITA:
-1. Si paciente da: NOMBRE + EMAIL + ESPECIALIDAD + FECHA
-   → Ejecuta: get_dentists(clinic_id="${params.clinicId}", specialty=ESPECIALIDAD)
-   → Respuesta: "1. ID:uuid-here Nombre (Especialidad)"
-   → EXTRAE el UUID después de "ID:"
+REGLA ABSOLUTA: Si ves una HORA (formato XX:XX ej: 14:00, 10:30) → EJECUTA book_appointment YA.
 
-2. Cuando paciente elige dentista (número 1, 2, etc):
-   → Ejecuta: get_available_slots(date=FECHA, dentist_id=EL_UUID, specialty=ESPECIALIDAD)
-   → Muestra horarios
+FLUJO:
+1. NOMBRE + EMAIL + ESPECIALIDAD + FECHA → Ejecuta get_dentists(clinic_id="${params.clinicId}", specialty)
+2. Paciente elige número → Ejecuta get_available_slots(date, dentist_id=UUID_DE_RESPUESTA_ANTERIOR, specialty)
+3. Paciente dice HORA → **EJECUTA INMEDIATAMENTE book_appointment(patient_name, patient_phone="${params.patientPhone}", patient_email, specialty, dentist_id=UUID, date, time, clinic_id="${params.clinicId}")**
 
-3. Cuando paciente dice la HORA (10:30, 10:00, etc):
-   → Ejecuta: book_appointment(patient_name=NOMBRE, patient_phone="${params.patientPhone}", patient_email=EMAIL, specialty=ESPECIALIDAD, dentist_id=EL_UUID, date=FECHA, time=HORA, clinic_id="${params.clinicId}")
-   → El sistema busca service_id automáticamente
-   → Responde: "Cita agendada"
+PARÁMETROS get_dentists:
+- clinic_id: "${params.clinicId}"
+- specialty: (la que el paciente mencionó)
+
+PARÁMETROS get_available_slots:
+- date: (YYYY-MM-DD)
+- dentist_id: (extrae UUID del formato "ID:uuid-aqui" de respuesta anterior)
+- specialty: (la especialidad)
+
+PARÁMETROS book_appointment (EJECUTA CUANDO VES HORA XX:XX):
+- patient_name: (el nombre que dio)
+- patient_phone: "${params.patientPhone}"
+- patient_email: (el email que dio)
+- specialty: (la especialidad)
+- dentist_id: (UUID que extrajiste)
+- date: (YYYY-MM-DD)
+- time: (la hora que dijo, formato HH:MM)
+- clinic_id: "${params.clinicId}"
 
 OTROS:
-- CONSULTAR CITAS: Si pregunta "mis citas" → get_patient_appointments(patient_phone="${params.patientPhone}", clinic_id="${params.clinicId}")
-- CANCELAR CITA: Si dice "cancelar" → cancel_appointment(patient_phone="${params.patientPhone}")
+- CONSULTAR: "mis citas" → get_patient_appointments(patient_phone="${params.patientPhone}", clinic_id="${params.clinicId}")
+- CANCELAR: "cancelar" → cancel_appointment(patient_phone="${params.patientPhone}")
 
-CRÍTICO:
-- EXTRAE UUID del formato "ID:uuid-aqui"
-- USA ese UUID en get_available_slots Y book_appointment
-- NO ejecutes la misma herramienta dos veces
-- Cuando paciente confirma hora → EJECUTA book_appointment INMEDIATAMENTE
-- Máximo 2 líneas en español
-- "Hoy"=${today}, "Mañana"=${tomorrow}`;
+**NO CONVERSACIÓN. SOLO EJECUTA HERRAMIENTAS.**
+"Hoy"=${today}, "Mañana"=${tomorrow}`;
 
     let messages = params.messages as Anthropic.MessageParam[];
 
-    // Limitar historial a últimos 10 mensajes para evitar rate limit
-    if (messages.length > 10) {
-      messages = messages.slice(-10);
-      console.log(`🔄 [Claude] Historial limitado a últimos 10 mensajes (tenía ${params.messages.length})`);
+    // Limitar historial a últimos 20 mensajes para mantener contexto sin exceder rate limit
+    if (messages.length > 20) {
+      messages = messages.slice(-20);
+      console.log(`🔄 [Claude] Historial limitado a últimos 20 mensajes (tenía ${params.messages.length})`);
     }
 
     console.log(`🔄 [Claude] Llamando a API con ${messages.length} mensajes`);
@@ -233,57 +239,89 @@ CRÍTICO:
       }
 
       case 'book_appointment': {
-        // Buscar service_id por especialidad si no se proporciona
-        let serviceId = input.service_id;
-        if (!serviceId) {
-          const service = await (this.prisma as any).service.findFirst({
-            where: {
+        try {
+          console.log(`📅 [WHATSAPP] Iniciando book_appointment`);
+          console.log(`📅 [WHATSAPP] Paciente: ${input.patient_name} (${input.patient_phone})`);
+          console.log(`📅 [WHATSAPP] Especialidad: ${input.specialty}, Fecha: ${input.date}, Hora: ${input.time}`);
+
+          // Buscar service_id por especialidad si no se proporciona
+          let serviceId = input.service_id;
+          if (!serviceId) {
+            const service = await (this.prisma as any).service.findFirst({
+              where: {
+                clinicId,
+                name: { contains: input.specialty, mode: 'insensitive' },
+              },
+            });
+            if (service) {
+              serviceId = service.id;
+              console.log(`✅ [WHATSAPP] Service encontrado: ${serviceId}`);
+            } else {
+              console.warn(`⚠️ [WHATSAPP] Service no encontrado para especialidad: ${input.specialty}`);
+            }
+          }
+
+          let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
+          console.log(`👤 [WHATSAPP] Paciente búsqueda: ${patient ? 'encontrado' : 'no encontrado'}`);
+
+          if (!patient) {
+            const [firstName, ...rest] = (input.patient_name as string).split(' ');
+            patient = await this.patientRepository.create({
               clinicId,
-              name: { contains: input.specialty, mode: 'insensitive' },
-            },
+              firstName,
+              lastName: rest.join(' ') || 'N/A',
+              phone: input.patient_phone,
+              email: input.patient_email,
+              dateOfBirth: new Date('1990-01-01'),
+              gender: 'O',
+            } as any);
+            console.log(`✅ [WHATSAPP] Paciente creado: ${patient.id}`);
+          }
+
+          const googleEventId = await this.calendarService.createAppointmentEvent({
+            patientName: input.patient_name,
+            specialty: input.specialty,
+            date: input.date,
+            time: input.time,
           });
-          if (service) serviceId = service.id;
-        }
+          console.log(`✅ [WHATSAPP] Google Calendar creado: ${googleEventId}`);
 
-        let patient = await this.patientRepository.findByPhoneAndClinic(input.patient_phone, clinicId);
+          const startTime = new Date(`${input.date}T${input.time}:00`);
+          const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
 
-        if (!patient) {
-          const [firstName, ...rest] = (input.patient_name as string).split(' ');
-          patient = await this.patientRepository.create({
+          console.log(`💾 [WHATSAPP] Guardando cita en BD...`);
+          const appointment = await this.appointmentRepository.create({
             clinicId,
-            firstName,
-            lastName: rest.join(' ') || 'N/A',
-            phone: input.patient_phone,
-            email: input.patient_email,
-            dateOfBirth: new Date('1990-01-01'),
-            gender: 'O',
+            patientId: patient.id,
+            dentistId: input.dentist_id,
+            serviceId,
+            startTime,
+            endTime,
+            status: 'SCHEDULED',
+            channel: 'WHATSAPP',
+            notes: `${input.notes ?? ''} [Google Event: ${googleEventId}]`.trim(),
           } as any);
+
+          console.log(`✅ [WHATSAPP] ¡CITA AGENDADA EXITOSAMENTE!`);
+          console.log(`✅ [WHATSAPP] Appointment ID: ${appointment.id}`);
+          console.log(`✅ [WHATSAPP] Paciente: ${appointment.patient?.firstName} ${appointment.patient?.lastName}`);
+          console.log(`✅ [WHATSAPP] Fecha/Hora: ${startTime.toISOString()}`);
+
+          return `Cita agendada ✅\n${input.date} a las ${input.time}`;
+        } catch (err: any) {
+          console.error(`❌ [WHATSAPP] ERROR AL AGENDAR CITA`);
+          console.error(`❌ [WHATSAPP] Error: ${err.message}`);
+          console.error(`❌ [WHATSAPP] Stack: ${err.stack}`);
+          console.error(`❌ [WHATSAPP] Datos: `, {
+            patient_name: input.patient_name,
+            patient_phone: input.patient_phone,
+            specialty: input.specialty,
+            date: input.date,
+            time: input.time,
+            dentist_id: input.dentist_id,
+          });
+          return `Error al agendar: ${err.message}`;
         }
-
-        const googleEventId = await this.calendarService.createAppointmentEvent({
-          patientName: input.patient_name,
-          specialty: input.specialty,
-          date: input.date,
-          time: input.time,
-        });
-
-        const startTime = new Date(`${input.date}T${input.time}:00`);
-        const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-
-        const appointment = await this.appointmentRepository.create({
-          clinicId,
-          patientId: patient.id,
-          dentistId: input.dentist_id,
-          serviceId,
-          startTime,
-          endTime,
-          status: 'SCHEDULED',
-          channel: 'WHATSAPP',
-          notes: `${input.notes ?? ''} [Google Event: ${googleEventId}]`.trim(),
-        } as any);
-
-        console.log(`✅ [WHATSAPP] Cita agendada: ${appointment.id}`);
-        return `Cita agendada ✅\n${input.date} a las ${input.time}`;
       }
 
       case 'cancel_appointment': {
