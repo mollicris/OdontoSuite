@@ -92,6 +92,19 @@ export class PatientRepository {
     return new PatientEntity(this.mapPrismaToEntity(patient));
   }
 
+  async findByPhoneAndClinic(
+    phone: string,
+    clinicId: string,
+  ): Promise<PatientEntity | null> {
+    const patient = await this.prisma.patient.findFirst({
+      where: { phone, clinicId },
+    });
+
+    if (!patient) return null;
+
+    return new PatientEntity(this.mapPrismaToEntity(patient));
+  }
+
   async update(id: string, data: Partial<PatientEntity>): Promise<PatientEntity> {
     const updated = await this.prisma.patient.update({
       where: { id },
